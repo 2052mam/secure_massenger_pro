@@ -95,10 +95,8 @@ flutter:
   uses-material-design: true
   generate: true
 
-  # assets:
-  #   - assets/icons/
-  #   - assets/images/
-  #   - assets/fonts/
+  assets:
+    - assets/sounds/
 
   # fonts:
   #   - family: Vazirmatn

@@ -220,6 +220,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: TextField(
                 controller: _ctrl,
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w500,
+                ),
                 onChanged: (q) {
                   setState(() {});
                   _search(q);
@@ -231,6 +236,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   hintText: isFa
                       ? 'جستجو کاربر یا کانال...'
                       : 'Search user or channel...',
+                  hintStyle: TextStyle(
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF94A3B8),
+                  ),
                   prefixIcon: Icon(Icons.search_rounded, color: primary),
                   suffixIcon: _ctrl.text.isEmpty
                       ? null
@@ -261,6 +269,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               ),
             Expanded(
               child: ListView(
+                physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                 padding: const EdgeInsets.only(bottom: 16),
                 children: [
                   if (showHistory) ...[

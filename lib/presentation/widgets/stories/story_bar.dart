@@ -337,10 +337,13 @@ class _StoryAvatar extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                   height: 1.2,
+                  color: theme.brightness == Brightness.dark
+                      ? Colors.white70
+                      : const Color(0xFF0F172A),
                 ),
                 textScaler: TextScaler.noScaling,
               ),

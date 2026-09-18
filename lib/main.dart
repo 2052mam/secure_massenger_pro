@@ -13,6 +13,7 @@ import 'data/services/media_cache_service.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/push_service.dart';
 import 'data/services/storage_service.dart';
+import 'data/services/sound_service.dart';
 import 'core/utils/app_locale.dart';
 
 Future<void> main() async {
@@ -31,6 +32,7 @@ Future<void> main() async {
   // Offline media vault: every photo/video/file this device sends or opens is
   // kept locally so the chat history survives a total loss of server data.
   await MediaCacheService.instance.init();
+  await SoundService().init();
 
   // Local notifications work with zero push infrastructure (no FCM), so they
   // keep working under sanctions/filtering. The foreground poller notifies

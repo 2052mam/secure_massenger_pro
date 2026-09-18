@@ -26,6 +26,7 @@ import '../../../data/services/notification_service.dart';
 import '../../../data/services/storage_service.dart';
 import '../../../data/services/voice_service.dart';
 import '../../../data/services/location_service.dart';
+import '../../../data/services/sound_service.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_list_provider.dart';
@@ -113,6 +114,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   bool _sending = false;
   String? _uploadingType;
   String? _uploadingName;
+  double? _uploadProgress;
   bool _searchMode = false;
   String? _error;
   Timer? _pollTimer;
@@ -743,6 +745,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       // Re-seed from what it just sent so the next poll is healthy again.
       final cursorReset = res['cursor_reset'] == true;
       if (list.isNotEmpty) {
+        final hasIncoming = list.any(
+          (m) =>
+              m.senderId != null &&
+              m.senderId != _currentUserId &&
+              m.senderId != _sessionUserId,
+        );
+        if (hasIncoming) {
+          unawaited(SoundService().playMessageReceived());
+        }
         _lastMessageId = list.last.id;
         _lastMessageAt = list.last.createdAt;
         final atBottom =
@@ -853,7 +864,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _replyTo = null;
         _isSpoiler = false;
         _sending = false;
+        _uploadProgress = null;
+        _uploadingType = null;
+        _uploadingName = null;
       });
+      unawaited(SoundService().playMessageSent());
       if (_slowModeDelay > 0 && (_myRole != 'owner' && _myRole != 'admin')) {
         _startSlowModeTimer(_slowModeDelay);
       }
@@ -940,7 +955,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     Map<String, String>? fields,
     String? fileName,
   }) async {
-    final upload = await _api.uploadFile('/media/upload', file, fields: fields);
+    if (mounted) setState(() => _uploadProgress = 0.05);
+    final upload = await _api.uploadFile(
+      '/media/upload',
+      file,
+      fields: fields,
+      onProgress: (p) {
+        if (mounted) setState(() => _uploadProgress = p);
+      },
+    );
+    if (mounted) setState(() => _uploadProgress = 1.0);
     final mediaId = upload['id'] as String?;
     if (mediaId != null && mediaId.isNotEmpty) {
       unawaited(
@@ -997,7 +1021,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _replyTo = null;
         _isSpoiler = false;
         _sending = false;
+        _uploadProgress = null;
+        _uploadingType = null;
+        _uploadingName = null;
       });
+      unawaited(SoundService().playMessageSent());
       if (_slowModeDelay > 0 && (_myRole != 'owner' && _myRole != 'admin')) {
         _startSlowModeTimer(_slowModeDelay);
       }
@@ -1006,7 +1034,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (mounted) ref.read(chatListProvider.notifier).refresh();
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _sending = false);
+      setState(() {
+        _sending = false;
+        _uploadProgress = null;
+        _uploadingType = null;
+        _uploadingName = null;
+      });
       if (e.statusCode == 429) {
         _handleSlowModeError(e.message);
       } else {
@@ -1014,7 +1047,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sending = false);
+      setState(() {
+        _sending = false;
+        _uploadProgress = null;
+        _uploadingType = null;
+        _uploadingName = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
@@ -1193,13 +1231,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _replyTo = null;
         _isSpoiler = false;
         _sending = false;
+        _uploadProgress = null;
+        _uploadingType = null;
+        _uploadingName = null;
       });
+      unawaited(SoundService().playMessageSent());
       if (_historyMode) await _loadMessages();
       _scrollToBottom();
       if (mounted) ref.read(chatListProvider.notifier).refresh();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sending = false);
+      setState(() {
+        _sending = false;
+        _uploadProgress = null;
+        _uploadingType = null;
+        _uploadingName = null;
+      });
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -1247,13 +1294,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           _mergeMessages([msg]);
           _replyTo = null;
           _sending = false;
+          _uploadProgress = null;
+          _uploadingType = null;
+          _uploadingName = null;
         });
+        unawaited(SoundService().playMessageSent());
         if (_historyMode) await _loadMessages();
         _scrollToBottom();
         if (mounted) ref.read(chatListProvider.notifier).refresh();
       } catch (e) {
         if (!mounted) return;
-        setState(() => _sending = false);
+        setState(() {
+          _sending = false;
+          _uploadProgress = null;
+          _uploadingType = null;
+          _uploadingName = null;
+        });
         if (mounted) {
           ScaffoldMessenger.of(
             context,
@@ -1287,6 +1343,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   // --- Telegram-like reactions ---
   Future<void> _toggleReaction(MessageModel msg, String emoji) async {
     try {
+      unawaited(SoundService().playReaction());
       await _api.post('/reactions/${msg.id}/reaction', {'emoji': emoji});
       // Local optimistic toggle: update reactions list immediately, then refresh from server
       // For simplicity, trigger a status refresh which will pull reactions via payloads
@@ -1542,12 +1599,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _mergeMessages([msg]);
         _replyTo = null;
         _sending = false;
+        _uploadProgress = null;
+        _uploadingType = null;
+        _uploadingName = null;
       });
+      unawaited(SoundService().playMessageSent());
       _scrollToBottom();
       if (mounted) ref.read(chatListProvider.notifier).refresh();
     } catch (e) {
       if (mounted) {
-        setState(() => _sending = false);
+        setState(() {
+          _sending = false;
+          _uploadProgress = null;
+          _uploadingType = null;
+          _uploadingName = null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
@@ -1927,13 +1993,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _replyTo = null;
         _isSpoiler = false;
         _sending = false;
+        _uploadProgress = null;
+        _uploadingType = null;
+        _uploadingName = null;
       });
+      unawaited(SoundService().playMessageSent());
       if (_historyMode) await _loadMessages();
       _scrollToBottom();
       if (mounted) ref.read(chatListProvider.notifier).refresh();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sending = false);
+      setState(() {
+        _sending = false;
+        _uploadProgress = null;
+        _uploadingType = null;
+        _uploadingName = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
@@ -2943,6 +3018,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       )
                     : ListView.builder(
                         controller: _scrollCtrl,
+                        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 8,
@@ -3159,6 +3235,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ChatUploadBanner(
                 mediaType: _uploadingType!,
                 fileName: _uploadingName,
+                progress: _uploadProgress,
                 isFa: Localizations.localeOf(context).languageCode == 'fa',
               ),
             if (_isRecording)
@@ -3217,7 +3294,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor: theme.scaffoldBackgroundColor,
+                        fillColor: theme.brightness == Brightness.dark
+                            ? const Color(0xFF242F3D)
+                            : const Color(0xFFF1F5F9),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 10,
@@ -3241,9 +3320,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   ),
                 ),
                 Material(
-                  color: Colors.transparent,
+                  color: theme.colorScheme.primary,
                   shape: const CircleBorder(),
                   clipBehavior: Clip.hardEdge,
+                  elevation: 1.5,
                   child: InkWell(
                     onTap: _sending ? null : _sendText,
                     onLongPress: _sending ? null : _scheduleMessage,
@@ -3251,11 +3331,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       padding: const EdgeInsets.all(10),
                       child: _sending
                           ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
-                          : Icon(Icons.send_rounded, color: theme.colorScheme.primary),
+                          : const Icon(Icons.send_rounded, color: Colors.white, size: 20),
                     ),
                   ),
                 ),

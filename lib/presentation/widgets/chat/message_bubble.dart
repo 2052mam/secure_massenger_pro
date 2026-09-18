@@ -80,9 +80,9 @@ class MessageBubble extends StatelessWidget {
 
     // Color psychology: Outgoing gets confident sapphire gradient; incoming gets crisp resting neutral
     final bg = isMine
-        ? (isDark ? const Color(0xFF2B5278) : theme.colorScheme.primary)
+        ? (isDark ? const Color(0xFF2B5278) : const Color(0xFF2481CC))
         : (isDark ? const Color(0xFF1E2C3A) : Colors.white);
-    final fg = isMine ? Colors.white : (isDark ? Colors.white : const Color(0xFF1E293B));
+    final fg = isMine ? Colors.white : (isDark ? Colors.white : const Color(0xFF0F172A));
     final quote = reply ?? message.replyTo;
     final rendersMedia =
         ((message.messageType == 'image' || message.messageType == 'video') &&
@@ -117,10 +117,7 @@ class MessageBubble extends StatelessWidget {
               ? LinearGradient(
                   colors: isDark
                       ? const [Color(0xFF2E5B88), Color(0xFF264C72)]
-                      : [
-                          theme.colorScheme.primary,
-                          theme.colorScheme.primary.withValues(alpha: 0.92),
-                        ],
+                      : const [Color(0xFF2AABEE), Color(0xFF229ED9), Color(0xFF2481CC)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 )
@@ -158,7 +155,7 @@ class MessageBubble extends StatelessWidget {
                       child: Text(
                         message.author?.displayName ?? message.sender!.displayName,
                         style: TextStyle(
-                          color: isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary,
+                          color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF0284C7),
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                         ),
@@ -172,7 +169,7 @@ class MessageBubble extends StatelessWidget {
                         child: Text(
                           '@${message.author!.username}',
                           style: TextStyle(
-                            color: (isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary)
+                            color: (isDark ? const Color(0xFF64B5F6) : const Color(0xFF0284C7))
                                 .withValues(alpha: 0.75),
                             fontSize: 11,
                           ),
@@ -183,14 +180,14 @@ class MessageBubble extends StatelessWidget {
                         margin: const EdgeInsets.only(right: 5),
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                         decoration: BoxDecoration(
-                          color: (isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary)
+                          color: (isDark ? const Color(0xFF64B5F6) : const Color(0xFF0284C7))
                               .withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           'مدیر',
                           style: TextStyle(
-                            color: isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary,
+                            color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF0284C7),
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                           ),
@@ -487,11 +484,11 @@ class MessageBubble extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.forward_rounded, size: 11, color: fg.withValues(alpha: 0.7)),
+                          Icon(Icons.forward_rounded, size: 11, color: isMine ? Colors.white70 : const Color(0xFF64748B)),
                           const SizedBox(width: 2),
                           Text(
                             'فوروارد شده',
-                            style: TextStyle(color: fg.withValues(alpha: 0.7), fontSize: 10),
+                            style: TextStyle(color: isMine ? Colors.white70 : const Color(0xFF64748B), fontSize: 10),
                           ),
                         ],
                       ),
@@ -502,7 +499,7 @@ class MessageBubble extends StatelessWidget {
                       child: Text(
                         'ویرایش شده',
                         style: TextStyle(
-                          color: fg.withValues(alpha: 0.7),
+                          color: isMine ? Colors.white70 : const Color(0xFF64748B),
                           fontSize: 10,
                           fontStyle: FontStyle.italic,
                         ),
@@ -512,7 +509,9 @@ class MessageBubble extends StatelessWidget {
                     '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
                     textDirection: TextDirection.ltr,
                     style: TextStyle(
-                      color: fg.withValues(alpha: 0.7),
+                      color: isMine
+                          ? Colors.white.withValues(alpha: 0.82)
+                          : (isDark ? Colors.white60 : const Color(0xFF64748B)),
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),
@@ -523,7 +522,7 @@ class MessageBubble extends StatelessWidget {
                       message.status == 'sent' ? Icons.done_rounded : Icons.done_all_rounded,
                       size: 16,
                       color: message.status == 'read'
-                          ? const Color(0xFF4FC3F7)
+                          ? const Color(0xFF80D8FF)
                           : Colors.white70,
                     ),
                   ],
@@ -533,6 +532,7 @@ class MessageBubble extends StatelessWidget {
             if (message.reactions.isNotEmpty)
               ReactionBar(
                 reactions: message.reactions,
+                isMine: isMine,
                 onReactionTap: onReactionTap,
                 onAddReaction: onAddReaction,
               ),

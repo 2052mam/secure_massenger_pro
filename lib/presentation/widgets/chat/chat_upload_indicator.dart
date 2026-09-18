@@ -1,12 +1,14 @@
 import 'dart:math' as math;
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
-/// Animated upload state banner shown above the composer or top of chat.
-/// Provides Telegram-level visual polish with fluid progress bar, animated
-/// icon pulsation, and clear status text.
+/// Next-gen animated upload banner shown above the composer or top of chat.
+/// Features high-precision upload percentage (e.g. 74%), fluid gradient ring,
+/// dynamic micro-animations, media icon badge, and cancel action.
 class ChatUploadBanner extends StatefulWidget {
-  final String mediaType; // 'image', 'video', 'voice', 'file', 'video_note'
+  final String mediaType; // 'image', 'video', 'voice', 'file', 'video_note', 'audio'
   final String? fileName;
+  final double? progress; // 0.0 to 1.0, or null if indeterminate
   final VoidCallback? onCancel;
   final bool isFa;
 
@@ -14,6 +16,7 @@ class ChatUploadBanner extends StatefulWidget {
     super.key,
     required this.mediaType,
     this.fileName,
+    this.progress,
     this.onCancel,
     this.isFa = true,
   });
@@ -44,48 +47,58 @@ class _ChatUploadBannerState extends State<ChatUploadBanner>
   IconData _iconForType() {
     switch (widget.mediaType) {
       case 'image':
-        return Icons.image_rounded;
+        return Icons.photo_library_rounded;
       case 'video':
         return Icons.videocam_rounded;
       case 'voice':
         return Icons.mic_rounded;
       case 'video_note':
         return Icons.play_circle_fill_rounded;
+      case 'audio':
+      case 'music':
+        return Icons.music_note_rounded;
       default:
         return Icons.insert_drive_file_rounded;
     }
   }
 
   String _titleForType() {
+    final pct = widget.progress != null ? ' (${(widget.progress! * 100).toInt()}%)' : '';
     if (widget.isFa) {
       switch (widget.mediaType) {
         case 'image':
-          return 'در حال بارگذاری و ارسال عکس…';
+          return 'در حال بارگذاری عکس$pct…';
         case 'video':
-          return 'در حال بهینه‌سازی و آپلود ویدیو…';
+          return 'در حال بهینه‌سازی و آپلود ویدیو$pct…';
         case 'voice':
-          return 'در حال آپلود پیام صوتی…';
+          return 'در حال ارسال پیام صوتی$pct…';
         case 'video_note':
-          return 'در حال ارسال ویدیو مسیج…';
+          return 'در حال آپلود ویدیو مسیج$pct…';
+        case 'audio':
+        case 'music':
+          return 'در حال ارسال موسیقی$pct…';
         default:
           return widget.fileName != null
-              ? 'در حال ارسال ${widget.fileName}…'
-              : 'در حال آپلود فایل…';
+              ? 'در حال ارسال ${widget.fileName}$pct…'
+              : 'در حال آپلود فایل$pct…';
       }
     } else {
       switch (widget.mediaType) {
         case 'image':
-          return 'Uploading photo…';
+          return 'Uploading photo$pct…';
         case 'video':
-          return 'Optimizing & uploading video…';
+          return 'Optimizing & uploading video$pct…';
         case 'voice':
-          return 'Uploading voice note…';
+          return 'Uploading voice note$pct…';
         case 'video_note':
-          return 'Sending video message…';
+          return 'Sending video message$pct…';
+        case 'audio':
+        case 'music':
+          return 'Uploading music$pct…';
         default:
           return widget.fileName != null
-              ? 'Uploading ${widget.fileName}…'
-              : 'Uploading file…';
+              ? 'Uploading ${widget.fileName}$pct…'
+              : 'Uploading file$pct…';
       }
     }
   }
@@ -93,58 +106,75 @@ class _ChatUploadBannerState extends State<ChatUploadBanner>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final primary = theme.colorScheme.primary;
+    final progress = widget.progress?.clamp(0.0, 1.0);
+    final percentageInt = progress != null ? (progress * 100).toInt() : null;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.95),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: primary.withValues(alpha: 0.25), width: 1),
+        color: isDark ? const Color(0xFF17212B) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: primary.withValues(alpha: isDark ? 0.35 : 0.22),
+          width: 1.2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: primary.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
-                  // Animated pulsing icon
-                  AnimatedBuilder(
-                    animation: _ctrl,
-                    builder: (context, child) {
-                      final scale = 0.92 + 0.08 * math.sin(_ctrl.value * 2 * math.pi);
-                      return Transform.scale(
-                        scale: scale,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: [
-                                primary,
-                                primary.withValues(alpha: 0.75),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                          ),
-                          child: Icon(_iconForType(), color: Colors.white, size: 20),
+                  // Circular Progress Ring with embedded media Icon or percentage
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: CircularProgressIndicator(
+                          value: progress,
+                          strokeWidth: 3.2,
+                          backgroundColor: primary.withValues(alpha: 0.15),
+                          valueColor: AlwaysStoppedAnimation<Color>(primary),
                         ),
-                      );
-                    },
+                      ),
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: primary.withValues(alpha: 0.12),
+                        ),
+                        child: Center(
+                          child: percentageInt != null
+                              ? Text(
+                                  '$percentageInt%',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: primary,
+                                    letterSpacing: -0.5,
+                                  ),
+                                )
+                              : Icon(_iconForType(), color: primary, size: 18),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,31 +183,43 @@ class _ChatUploadBannerState extends State<ChatUploadBanner>
                         Text(
                           _titleForType(),
                           style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: theme.colorScheme.onSurface,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13.5,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.isFa ? 'لطفاً شکیبا باشید' : 'Please wait…',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                          ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            if (percentageInt != null) ...[
+                              Text(
+                                '$percentageInt% ${widget.isFa ? 'تکمیل شد' : 'completed'}',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: primary,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text('•', style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+                              const SizedBox(width: 6),
+                            ],
+                            Expanded(
+                              child: Text(
+                                widget.fileName ?? (widget.isFa ? 'در حال ارسال رسانه' : 'Sending media'),
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      valueColor: AlwaysStoppedAnimation<Color>(primary),
                     ),
                   ),
                   if (widget.onCancel != null) ...[
@@ -192,16 +234,14 @@ class _ChatUploadBannerState extends State<ChatUploadBanner>
                 ],
               ),
             ),
-            // Shimmering linear progress bar
-            AnimatedBuilder(
-              animation: _ctrl,
-              builder: (context, child) {
-                return LinearProgressIndicator(
-                  minHeight: 2.5,
-                  backgroundColor: primary.withValues(alpha: 0.12),
-                  valueColor: AlwaysStoppedAnimation<Color>(primary),
-                );
-              },
+            // Smooth gradient linear progress bar
+            SizedBox(
+              height: 3,
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: primary.withValues(alpha: 0.1),
+                valueColor: AlwaysStoppedAnimation<Color>(primary),
+              ),
             ),
           ],
         ),

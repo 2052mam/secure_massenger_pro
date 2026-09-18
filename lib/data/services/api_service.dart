@@ -134,10 +134,11 @@ class ApiService {
     File file, {
     String fieldName = 'file',
     Map<String, String>? fields,
+    void Function(double progress)? onProgress,
   }) =>
       _guard(() async {
         final uri = Uri.parse('${ApiConstants.baseUrl}$path');
-        final request = http.MultipartRequest('POST', uri);
+        final request = _ProgressMultipartRequest('POST', uri, onProgress: onProgress);
         request.headers.addAll(_headers);
         if (fields != null) request.fields.addAll(fields);
 
@@ -248,6 +249,30 @@ class ApiService {
       return 'خطای موقت سرور. لطفاً چند لحظه بعد دوباره تلاش کنید.';
     }
     return 'خطای ناشناخته ($status)';
+  }
+}
+
+class _ProgressMultipartRequest extends http.MultipartRequest {
+  final void Function(double progress)? onProgress;
+  _ProgressMultipartRequest(super.method, super.url, {this.onProgress});
+
+  @override
+  http.ByteStream finalize() {
+    final byteStream = super.finalize();
+    final total = contentLength;
+    int sent = 0;
+    final stream = byteStream.transform(
+      StreamTransformer<List<int>, List<int>>.fromHandlers(
+        handleData: (data, sink) {
+          sent += data.length;
+          if (total > 0 && onProgress != null) {
+            onProgress!(sent / total);
+          }
+          sink.add(data);
+        },
+      ),
+    );
+    return http.ByteStream(stream);
   }
 }
 

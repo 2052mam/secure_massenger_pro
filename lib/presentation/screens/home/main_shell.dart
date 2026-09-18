@@ -112,6 +112,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           children: [
             const MiniMusicPlayer(),
             NavigationBar(
+              backgroundColor: Colors.transparent,
               selectedIndex: index,
               onDestinationSelected: (i) =>
                   ref.read(shellIndexProvider.notifier).state = i,

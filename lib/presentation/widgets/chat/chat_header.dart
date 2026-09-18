@@ -64,9 +64,11 @@ class ChatHeader extends StatelessWidget {
       subtitle = labels.profile;
     }
 
-    final color =
-        Theme.of(context).appBarTheme.foregroundColor ??
-        Theme.of(context).colorScheme.onSurface;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtitleColor = online
+        ? (isDark ? const Color(0xFF69F0AE) : const Color(0xFF059669))
+        : (isDark ? Colors.white70 : const Color(0xFF64748B));
 
     return Semantics(
       button: onTap != null,
@@ -84,7 +86,7 @@ class ChatHeader extends StatelessWidget {
                     title: name,
                     url: photo,
                     token: token,
-                    foreground: color,
+                    foreground: titleColor,
                     radius: 20,
                     fallbackIcon: chatType == 'saved' ? Icons.bookmark_rounded : null,
                   ),
@@ -121,17 +123,22 @@ class ChatHeader extends StatelessWidget {
                             name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16.5,
                               fontWeight: FontWeight.w700,
                               letterSpacing: -0.2,
+                              color: titleColor,
                             ),
                           ),
                         ),
                         if (chatType == 'saved')
-                          const Padding(
-                            padding: EdgeInsets.only(right: 4),
-                            child: Icon(Icons.bookmark_rounded, size: 14, color: Colors.white70),
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Icon(
+                              Icons.bookmark_rounded,
+                              size: 14,
+                              color: isDark ? Colors.white70 : Theme.of(context).colorScheme.primary,
+                            ),
                           ),
                       ],
                     ),
@@ -143,9 +150,7 @@ class ChatHeader extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: online ? FontWeight.w600 : FontWeight.w400,
-                        color: online
-                            ? const Color(0xFF69F0AE)
-                            : color.withValues(alpha: 0.8),
+                        color: subtitleColor,
                       ),
                     ),
                   ],

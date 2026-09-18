@@ -104,7 +104,11 @@ class ReplyPreview extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: color.withValues(alpha: 0.85),
+                          color: foreground != null && foreground == Colors.white
+                              ? Colors.white.withValues(alpha: 0.9)
+                              : (Theme.of(context).brightness == Brightness.dark
+                                  ? const Color(0xFFCBD5E1)
+                                  : const Color(0xFF334155)),
                           fontSize: 12,
                         ),
                       ),

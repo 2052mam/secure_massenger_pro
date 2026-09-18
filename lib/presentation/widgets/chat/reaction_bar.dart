@@ -3,12 +3,14 @@ import '../../../data/models/reaction_model.dart';
 
 class ReactionBar extends StatelessWidget {
   final List<ReactionModel> reactions;
+  final bool isMine;
   final ValueChanged<String>? onReactionTap;
   final VoidCallback? onAddReaction;
 
   const ReactionBar({
     super.key,
     required this.reactions,
+    this.isMine = false,
     this.onReactionTap,
     this.onAddReaction,
   });
@@ -30,18 +32,24 @@ class ReactionBar extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                   decoration: BoxDecoration(
-                    color: r.me
-                        ? (isDark
-                            ? const Color(0xFF2563EB).withValues(alpha: 0.35)
-                            : const Color(0xFF2563EB).withValues(alpha: 0.16))
-                        : (isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : Colors.black.withValues(alpha: 0.06)),
+                    color: isMine
+                        ? (r.me
+                            ? Colors.white.withValues(alpha: 0.32)
+                            : Colors.white.withValues(alpha: 0.18))
+                        : (r.me
+                            ? (isDark
+                                ? const Color(0xFF2563EB).withValues(alpha: 0.4)
+                                : const Color(0xFFE0F2FE))
+                            : (isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : const Color(0xFFF1F5F9))),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: r.me
-                          ? (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB))
-                          : Colors.transparent,
+                      color: isMine
+                          ? (r.me ? Colors.white : Colors.white24)
+                          : (r.me
+                              ? (isDark ? const Color(0xFF60A5FA) : const Color(0xFF0284C7))
+                              : (isDark ? Colors.transparent : const Color(0xFFE2E8F0))),
                       width: 1.2,
                     ),
                   ),
@@ -54,10 +62,12 @@ class ReactionBar extends StatelessWidget {
                         '${r.count}',
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: r.me
-                              ? (isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8))
-                              : (isDark ? Colors.white70 : const Color(0xFF475569)),
-                          fontWeight: r.me ? FontWeight.w700 : FontWeight.w500,
+                          color: isMine
+                              ? Colors.white
+                              : (r.me
+                                  ? (isDark ? const Color(0xFF93C5FD) : const Color(0xFF0369A1))
+                                  : (isDark ? Colors.white70 : const Color(0xFF0F172A))),
+                          fontWeight: (r.me || isMine) ? FontWeight.w700 : FontWeight.w600,
                         ),
                       ),
                     ],
@@ -70,15 +80,24 @@ class ReactionBar extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : Colors.black.withValues(alpha: 0.05),
+                  color: isMine
+                      ? Colors.white.withValues(alpha: 0.18)
+                      : (isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : const Color(0xFFF1F5F9)),
                   borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isMine
+                        ? Colors.white24
+                        : (isDark ? Colors.transparent : const Color(0xFFE2E8F0)),
+                  ),
                 ),
                 child: Icon(
                   Icons.add_reaction_outlined,
                   size: 16,
-                  color: isDark ? Colors.white60 : Colors.black45,
+                  color: isMine
+                      ? Colors.white70
+                      : (isDark ? Colors.white60 : const Color(0xFF64748B)),
                 ),
               ),
             ),

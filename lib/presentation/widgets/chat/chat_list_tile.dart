@@ -160,6 +160,7 @@ class ChatListTile extends StatelessWidget {
                                         : FontWeight.w600,
                                     fontSize: 16,
                                     letterSpacing: -0.2,
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
                                   ),
                                 ),
                               ),
@@ -180,17 +181,17 @@ class ChatListTile extends StatelessWidget {
                             child: Icon(
                               Icons.volume_off_rounded,
                               size: 15,
-                              color: Colors.grey.shade400,
+                              color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
                             ),
                           ),
                         Text(
                           timeStr,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: unread > 0 ? FontWeight.w600 : FontWeight.w400,
+                            fontWeight: unread > 0 ? FontWeight.w700 : FontWeight.w500,
                             color: unread > 0
-                                ? theme.colorScheme.primary
-                                : theme.textTheme.bodySmall?.color?.withValues(alpha: 0.75),
+                                ? (isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary)
+                                : (isDark ? Colors.white54 : const Color(0xFF64748B)),
                           ),
                         ),
                       ],
@@ -213,12 +214,12 @@ class ChatListTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: unread > 0
-                                  ? theme.textTheme.bodyMedium?.color
-                                  : theme.textTheme.bodySmall?.color,
+                                  ? (isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary)
+                                  : (isDark ? Colors.white60 : const Color(0xFF334155)),
                               fontSize: 13.5,
                               fontWeight: unread > 0
-                                  ? FontWeight.w500
-                                  : FontWeight.normal,
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
                             ),
                           ),
                         ),

@@ -121,7 +121,11 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                 key: const ValueKey('chat-list-search-field'),
                 controller: _searchCtrl,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
                 textInputAction: TextInputAction.search,
                 onChanged: (value) => setState(() => _query = value),
                 decoration: InputDecoration(
@@ -133,7 +137,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                       ? 'جستجو در چت‌ها، گروه‌ها و کانال‌ها...'
                       : 'Search chats, groups and channels...',
                   hintStyle: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: isDark ? Colors.white60 : const Color(0xFF94A3B8),
                     fontSize: 15,
                   ),
                 ),
@@ -278,7 +282,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                     color: theme.colorScheme.primary,
                     onRefresh: () => ref.read(chatListProvider.notifier).refresh(),
                     child: ListView.separated(
-                      physics: const AlwaysScrollableScrollPhysics(),
+                      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                       itemCount: itemCount,
                       separatorBuilder: (_, __) => Divider(
                         height: 1,
@@ -295,16 +299,13 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                         }
                         final chat = chats[index - (showArchiveRow ? 1 : 0)];
                         return ChatListTile(
-                              key: ValueKey(chat.id),
-                              chat: chat,
-                              isFa: isFa,
-                              onTap: () => _openChat(chat),
-                              onLongPress: () =>
-                                  showChatContextMenu(context, ref, chat),
-                            )
-                            .animate()
-                            .fadeIn(duration: 260.ms, delay: (18 * (index % 12)).ms)
-                            .slideY(begin: 0.04, curve: Curves.easeOut);
+                          key: ValueKey(chat.id),
+                          chat: chat,
+                          isFa: isFa,
+                          onTap: () => _openChat(chat),
+                          onLongPress: () =>
+                              showChatContextMenu(context, ref, chat),
+                        );
                       },
                     ),
                   ),

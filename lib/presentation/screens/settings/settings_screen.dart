@@ -7,6 +7,7 @@ import '../../../data/services/api_service.dart';
 import '../../../data/services/background_poll_service.dart';
 import '../../../data/services/connection_service.dart';
 import '../../../data/services/notification_service.dart';
+import '../../../data/services/sound_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/chat/chat_avatar.dart';
 import '../../providers/locale_provider.dart';
@@ -186,9 +187,11 @@ class SettingsScreen extends ConsumerWidget {
             // Section: Connection & Sync
             _settingsGroup(
               context,
-              title: isFa ? 'ارتباط و اتصال' : 'Connection & Sync',
+              title: isFa ? 'ارتباط و صداها' : 'Connection & Sounds',
               children: [
                 const _NotificationTile(),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                const _SoundEffectsTile(),
                 Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
                 ListTile(
                   leading: _iconBadge(Icons.sync_rounded, const Color(0xFF00ACC1)),
@@ -741,3 +744,54 @@ class _NotificationTileState extends State<_NotificationTile> {
     );
   }
 }
+
+class _SoundEffectsTile extends StatefulWidget {
+  const _SoundEffectsTile();
+
+  @override
+  State<_SoundEffectsTile> createState() => _SoundEffectsTileState();
+}
+
+class _SoundEffectsTileState extends State<_SoundEffectsTile> {
+  bool _enabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = SoundService().isEnabled;
+  }
+
+  Future<void> _toggle(bool value) async {
+    setState(() => _enabled = value);
+    await SoundService().setEnabled(value);
+    if (value) {
+      unawaited(SoundService().playMessageSent());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: const Color(0xFF10B981).withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          _enabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+          color: const Color(0xFF10B981),
+          size: 20,
+        ),
+      ),
+      title: const Text('افکت‌های صوتی پیام‌ها', style: TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: const Text(
+        'صدای ارسال و دریافت پیام و واکنش‌ها',
+        style: TextStyle(fontSize: 12),
+      ),
+      trailing: Switch(value: _enabled, onChanged: _toggle),
+    );
+  }
+}
+

@@ -86,19 +86,30 @@ class AppTheme {
       splashFactory: InkSparkle.splashFactory,
       appBarTheme: const AppBarTheme(
         elevation: 0,
-        scrolledUnderElevation: 1,
+        scrolledUnderElevation: 1.5,
         centerTitle: false,
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: Color(0xFF0F172A),
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Color(0x0F000000),
         titleTextStyle: TextStyle(
           fontFamily: 'Vazirmatn',
           fontSize: 19,
           fontWeight: FontWeight.w700,
-          color: Colors.white,
+          color: Color(0xFF0F172A),
           letterSpacing: -0.2,
         ),
-        iconTheme: IconThemeData(color: Colors.white),
-        actionsIconTheme: IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: Color(0xFF1E293B)),
+        actionsIconTheme: IconThemeData(color: Color(0xFF1E293B)),
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: ZoomPageTransitionsBuilder(),
+          TargetPlatform.linux: ZoomPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        },
       ),
       cardTheme: CardThemeData(
         elevation: 0,
@@ -330,6 +341,15 @@ class AppTheme {
         ),
         iconTheme: IconThemeData(color: Colors.white),
         actionsIconTheme: IconThemeData(color: Colors.white),
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: ZoomPageTransitionsBuilder(),
+          TargetPlatform.linux: ZoomPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        },
       ),
       cardTheme: CardThemeData(
         elevation: 0,
