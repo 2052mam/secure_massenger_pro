@@ -1,0 +1,5 @@
+FCM tick skipped (credentials): HTTPSConnectionPool(host='oauth2.googleapis.com', port=443): Max retries exceeded with url: /token (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')))
+FCM tick error: HTTPSConnectionPool(host='fcm.googleapis.com', port=443): Max retries exceeded with url: /v1/projects/man-50b0c/messages:send (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')))
+FCM tick error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+FCM tick error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+FCM tick skipped (credentials): HTTPSConnectionPool(host='oauth2.googleapis.com', port=443): Max retries exceeded with url: /token (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1016)')))
