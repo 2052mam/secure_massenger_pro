@@ -44,12 +44,15 @@ class MediaLabels {
   String get latest =>
       isFa ? 'بازگشت به آخرین پیام‌ها' : 'Back to latest messages';
   String get earlier => isFa ? 'پیام‌های قدیمی‌تر' : 'Earlier messages';
+  String get poll => isFa ? 'نظرسنجی' : 'Poll';
+  String get quiz => isFa ? 'آزمون' : 'Quiz';
 
   String type(String type) => switch (type) {
     'image' => photo,
     'video' => video,
     'voice' || 'audio' => voice,
     'file' || 'document' => file,
+    'poll' => poll,
     _ => message,
   };
 }

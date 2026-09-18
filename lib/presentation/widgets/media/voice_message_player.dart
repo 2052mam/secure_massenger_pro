@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/utils/save_feedback.dart';
 
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -195,19 +196,16 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer>
         mediaUrl: widget.url,
         fileName: fileName,
         token: widget.token,
+        messageType: 'voice',
       );
       if (mounted) {
         setState(() => _downloading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ویس ذخیره شد ($fileName)')),
-        );
+        SaveFeedback.success(context, fileName: fileName);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _downloading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطا در دانلود ویس: $e')),
-        );
+        SaveFeedback.failure(context, e);
       }
     }
   }

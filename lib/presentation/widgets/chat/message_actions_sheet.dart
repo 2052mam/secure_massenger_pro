@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/save_feedback.dart';
 import 'package:flutter/services.dart';
 
 import '../../../data/models/message_model.dart';
@@ -71,15 +72,23 @@ class MessageActionsSheet extends StatelessWidget {
         (message.content?.isNotEmpty == true ? message.content! : '${message.messageType}_${message.id}.$ext');
     final mediaUrl = message.mediaUrl ?? '/api/v1/media/$mediaId';
 
+    final isFa = Localizations.localeOf(context).languageCode == 'fa';
     try {
-      messenger.showSnackBar(const SnackBar(content: Text('در حال دانلود فایل...')));
-      final path = await MediaDownloadService.downloadMedia(
+      messenger.showSnackBar(SnackBar(
+        content: Text(isFa ? 'در حال دانلود…' : 'Downloading…'),
+      ));
+      await MediaDownloadService.downloadMedia(
         mediaUrl: mediaUrl,
         fileName: fileName,
+        // Routes the file to the right album (Pictures/Movies/Music).
+        messageType: message.messageType,
+        mediaId: mediaId,
+        chatId: message.chatId,
+        messageId: message.id,
       );
-      messenger.showSnackBar(SnackBar(content: Text('فایل ذخیره شد: $fileName')));
+      if (context.mounted) SaveFeedback.success(context, fileName: fileName);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('خطا در دانلود: $e')));
+      if (context.mounted) SaveFeedback.failure(context, e);
     }
   }
 

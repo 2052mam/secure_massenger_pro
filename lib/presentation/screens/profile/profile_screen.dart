@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'avatar_crop_screen.dart';
+
 import '../../../core/constants/api_constants.dart';
 import '../../../data/models/user_model.dart';
 import '../../widgets/chat/chat_avatar.dart';
@@ -58,17 +60,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
       source: ImageSource.gallery,
-      maxWidth: 800,
-      imageQuality: 85,
+      // Point 2: keep more resolution than the old 800px cap, because the
+      // cropper zooms into a region and then downsizes it itself.
+      maxWidth: 2048,
+      imageQuality: 92,
     );
     if (picked == null || !mounted) return;
 
+    // Point 2: Telegram never uploads the raw pick — the user frames the
+    // circle first.
+    final cropped = await Navigator.of(context).push<File>(
+      MaterialPageRoute(
+        builder: (_) => AvatarCropScreen(imageFile: File(picked.path)),
+      ),
+    );
+    if (cropped == null || !mounted) return;
+
     setState(() => _loading = true);
     try {
-      final uploadRes = await api.uploadFile(
-        '/media/upload',
-        File(picked.path),
-      );
+      final uploadRes = await api.uploadFile('/media/upload', cropped);
       final mediaId = uploadRes['id'] as String;
       final fullUrl =
           uploadRes['url'] as String? ?? '${ApiConstants.baseUrl}/media/$mediaId';

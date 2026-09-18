@@ -1,9 +1,40 @@
 from datetime import datetime, timedelta
+import re
 
 import pyotp
 
 from app import db
+from app.models.message import Message
 from app.models.user import PhoneVerification, User
+
+
+def latest_code(app, delivered):
+    """The most recent code, whichever channel actually carried it.
+
+    Like Telegram, an account that still has a live session receives its login
+    code *inside the app* (Saved Messages) instead of by SMS, so a test can no
+    longer assume the SMS sender saw it.
+    """
+    with app.app_context():
+        message = Message.query.filter(
+            Message.content.like('%کد ورود شما%'),
+        ).order_by(Message.created_at.desc()).first()
+        in_app_code = None
+        if message:
+            match = re.search(r'کد ورود شما: (\d{6})', message.content or '')
+            if match:
+                in_app_code = (match.group(1), message.created_at)
+    if in_app_code and not delivered:
+        return in_app_code[0]
+    if in_app_code:
+        # Both channels have been used at some point; the in-app copy is only
+        # newer when the most recent request was delivered in-app.
+        with app.app_context():
+            challenge = PhoneVerification.query.order_by(
+                PhoneVerification.created_at.desc()).first()
+        if challenge is not None and in_app_code[1] >= challenge.created_at:
+            return in_app_code[0]
+    return delivered[-1][1]
 
 
 def device(device_id='phone-test-device'):
@@ -75,7 +106,7 @@ def test_phone_registration_sends_code_activates_account_and_creates_session(app
         assert delivered[-1][1] not in challenge.code_hash
 
 
-def test_phone_login_is_primary_and_unknown_numbers_are_not_enumerated(app, client):
+def test_phone_login_is_primary_and_unknown_numbers_go_to_registration(app, client):
     delivered = []
     app.config['SMS_SENDER'] = lambda mobile, code: delivered.append((mobile, code))
     registration = register(client)
@@ -92,24 +123,75 @@ def test_phone_login_is_primary_and_unknown_numbers_are_not_enumerated(app, clie
     unknown = client.post('/api/v1/auth/request-phone-code', json={
         'mobile_number': '+989121234568',
     })
-    assert known.status_code == unknown.status_code == 202
-    assert known.json['message'] == unknown.json['message']
-    assert len(delivered) == 2  # Unknown number was not sent an SMS.
+    assert known.status_code == 202
+    assert known.json['registration_required'] is False
+    # Telegram parity: this account already has a live session, so the code is
+    # delivered inside the app and costs no SMS.
+    assert known.json['delivery_channel'] == 'in_app'
+    assert known.json['sent_in_app'] is True
+    # An unregistered number is never sent a code; it must register first.
+    assert unknown.status_code == 200
+    assert unknown.json['registration_required'] is True
+    assert 'verification_id' not in unknown.json
+    # Neither the unknown number nor the in-app login consumed an SMS.
+    assert len(delivered) == 1
 
     signed_in = client.post('/api/v1/auth/verify-phone', json={
         'verification_id': known.json['verification_id'],
-        'code': delivered[-1][1],
+        'code': latest_code(app, delivered),
         'device_info': device('second-device'),
     })
     assert signed_in.status_code == 200
     assert signed_in.json['user']['id'] == verified.json['user']['id']
 
     fake = client.post('/api/v1/auth/verify-phone', json={
-        'verification_id': unknown.json['verification_id'],
+        'verification_id': 'not-a-real-challenge',
         'code': '000000',
         'device_info': device(),
     })
     assert fake.status_code == 401
+
+
+def test_check_phone_tells_the_login_screen_to_open_registration(app, client):
+    delivered = []
+    app.config['SMS_SENDER'] = lambda mobile, code: delivered.append((mobile, code))
+    registration = register(client)
+    client.post('/api/v1/auth/verify-phone', json={
+        'verification_id': registration.json['verification_id'],
+        'code': delivered[-1][1],
+        'device_info': device(),
+    })
+
+    existing = client.post('/api/v1/auth/check-phone', json={
+        'mobile_number': '09121234567',
+    })
+    assert existing.status_code == 200
+    assert existing.json['registered'] is True
+    assert existing.json['registration_required'] is False
+
+    fresh = client.post('/api/v1/auth/check-phone', json={
+        'mobile_number': '09129999999',
+    })
+    assert fresh.status_code == 200
+    assert fresh.json['registration_required'] is True
+    # Checking a number must never trigger an SMS.
+    assert len(delivered) == 1
+
+    assert client.post('/api/v1/auth/check-phone', json={
+        'mobile_number': 'not-a-number',
+    }).status_code == 400
+
+
+def test_unverified_registration_still_requires_registration_to_login(app, client):
+    delivered = []
+    app.config['SMS_SENDER'] = lambda mobile, code: delivered.append((mobile, code))
+    assert register(client).status_code == 201  # never verified
+    requested = client.post('/api/v1/auth/request-phone-code', json={
+        'mobile_number': '09121234567',
+    })
+    assert requested.status_code == 200
+    assert requested.json['registration_required'] is True
+    assert len(delivered) == 1
 
 
 def test_resend_invalidates_the_previous_sms_code(app, client):
@@ -170,7 +252,7 @@ def test_optional_google_authenticator_follows_sms_verification(app, client):
     assert requested.status_code == 202
     sms_verified = client.post('/api/v1/auth/verify-phone', json={
         'verification_id': requested.json['verification_id'],
-        'code': delivered[-1][1],
+        'code': latest_code(app, delivered),
         'device_info': device('two-factor-device'),
     })
     assert sms_verified.status_code == 200

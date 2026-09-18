@@ -66,7 +66,11 @@ def list_chats():
 
         visible = visible_messages(user_id).filter(Message.chat_id == chat.id)
         last_msg = visible.order_by(Message.created_at.desc(), Message.id.desc()).first()
-        unread_query = visible.filter(Message.sender_id != user_id)
+        # Point 7: Security Support messages are written by the server but
+        # stored with the member as sender, so the usual "not sent by me"
+        # filter would hide every badge. They are always unread-worthy.
+        unread_query = (visible if chat.chat_type == 'security'
+                        else visible.filter(Message.sender_id != user_id))
         if m.last_read_message_id:
             read_msg = db.session.get(Message, m.last_read_message_id)
             if read_msg and read_msg.chat_id == chat.id:
@@ -108,6 +112,9 @@ def list_chats():
             'is_archived': bool(m.is_archived),
             'is_muted': m.is_muted,
             'is_sponsored': bool(getattr(chat, 'is_sponsored', False)),
+            # A read-only, server-authored service chat (Point 7).
+            'is_service': chat.chat_type == 'security',
+            'is_read_only': chat.chat_type == 'security',
             'allow_forwarding': bool(getattr(chat, 'allow_forwarding', True)) if getattr(chat, 'allow_forwarding', True) is not None else True,
             'unread_count': unread,
             'last_message': {

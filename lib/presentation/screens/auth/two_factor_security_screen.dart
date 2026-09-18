@@ -22,6 +22,33 @@ class _TwoFactorSecurityScreenState
   bool _loading = false;
   String? _error;
 
+  /// Point 4: two-step verification is a primary-device-only setting. We ask
+  /// the server up front so the buttons can be disabled with an explanation,
+  /// instead of letting the user type a code and then get a 403.
+  bool _onPrimaryDevice = true;
+  bool _checkedPrimary = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPrimaryDevice();
+  }
+
+  Future<void> _checkPrimaryDevice() async {
+    try {
+      final response = await ApiService().get('/security/alerts',
+          query: {'limit': '1'});
+      if (!mounted) return;
+      setState(() {
+        _onPrimaryDevice = response['is_primary_device'] == true;
+        _checkedPrimary = true;
+      });
+    } catch (_) {
+      // Leave the controls enabled; the server still enforces the rule.
+      if (mounted) setState(() => _checkedPrimary = true);
+    }
+  }
+
   @override
   void dispose() {
     _codeCtrl.dispose();
@@ -114,10 +141,37 @@ class _TwoFactorSecurityScreenState
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.grey),
               ),
+              if (_checkedPrimary && !_onPrimaryDevice) ...[
+                const SizedBox(height: 20),
+                Container(
+                  key: const ValueKey('primary-device-notice'),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.lock_outline, color: Colors.orange, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'تغییر تأیید دو مرحله‌ای فقط از دستگاه اصلی حساب '
+                          'امکان‌پذیر است. از همان دستگاه وارد شوید یا در بخش '
+                          '«دستگاه‌ها» دستگاه اصلی را منتقل کنید.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 30),
               if (!enabled)
                 ElevatedButton.icon(
-                  onPressed: _loading ? null : _startSetup,
+                  onPressed: (_loading || !_onPrimaryDevice) ? null : _startSetup,
                   icon: const Icon(Icons.add_moderator_outlined),
                   label: _loading
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
@@ -135,7 +189,7 @@ class _TwoFactorSecurityScreenState
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
-                  onPressed: _loading ? null : _disable,
+                  onPressed: (_loading || !_onPrimaryDevice) ? null : _disable,
                   icon: const Icon(Icons.remove_moderator_outlined, color: Colors.red),
                   label: const Text('غیرفعال‌سازی', style: TextStyle(color: Colors.red)),
                 ),

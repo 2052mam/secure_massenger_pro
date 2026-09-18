@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/save_feedback.dart';
 import '../../../data/models/message_model.dart';
 import '../../../data/services/media_download_service.dart';
 
@@ -56,6 +57,10 @@ class _FileMessageBubbleState extends State<FileMessageBubble> {
         mediaUrl: widget.mediaUrl,
         fileName: fileName,
         token: widget.token,
+        mediaId: widget.message.mediaId,
+        chatId: widget.message.chatId,
+        messageId: widget.message.id,
+        messageType: widget.message.messageType,
         onProgress: (received, total) {
           if (mounted && total > 0) {
             setState(() {
@@ -70,21 +75,14 @@ class _FileMessageBubbleState extends State<FileMessageBubble> {
           _downloading = false;
           _downloadedPath = path;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('فایل در دستگاه ذخیره شد: $fileName'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        SaveFeedback.success(context, fileName: fileName);
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _downloading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطا در دانلود فایل: $e')),
-        );
+        SaveFeedback.failure(context, e);
       }
     }
   }

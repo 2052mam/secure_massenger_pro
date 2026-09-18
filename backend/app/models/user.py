@@ -166,6 +166,14 @@ class UserDevice(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     last_active = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # The very first device to sign this account in owns it (Point 4).
+    # Only the primary device may remove its own entry, and only the primary
+    # device may enable two-step verification or lock the archive, so a
+    # secondary login can never evict the owner or change their security.
+    is_primary = db.Column(db.Boolean, nullable=False, default=False,
+                           server_default=db.false(), index=True)
+    primary_since = db.Column(db.DateTime, nullable=True)
+
     # Push registration for future server-side pushes (Telegram-like). The
     # current client uses polling + local notifications, which need no token,
     # but the columns keep older/newer app versions compatible.

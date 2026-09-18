@@ -63,6 +63,10 @@ def can(chat, user_id, key):
 
 
 def can_send(chat, user_id, message_type, view_once=False):
+    # Point 7: the Security Support service chat is strictly one-way. Only the
+    # server writes to it, so no member may ever post, reply or forward in.
+    if chat.chat_type == 'security':
+        return False
     mapping = {
         'text': 'send_messages',
         'image': 'send_photos',
@@ -75,6 +79,7 @@ def can_send(chat, user_id, message_type, view_once=False):
         'gif': 'send_messages',      # GIFs follow send_messages/photos
         'video_note': 'send_videos',
         'round_video': 'send_videos',
+        'poll': 'send_messages',      # polls/quizzes follow the text right
         'location': 'send_messages',  # locations follow text right
         'live_location': 'send_messages',
     }
@@ -92,7 +97,8 @@ def can_delete(chat, user_id, message):
     member = membership(chat, user_id)
     if not member:
         return False
-    if chat.chat_type in ('private', 'saved'):
+    # The user may clear their own security notices locally, like Telegram.
+    if chat.chat_type in ('private', 'saved', 'security'):
         return True
     if chat.chat_type == 'support':
         return message.sender_id == user_id or member.role in ('owner', 'admin')

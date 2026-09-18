@@ -1,12 +1,16 @@
 import 'dart:io';
+import '../../../core/utils/save_feedback.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'avatar_crop_screen.dart';
+
 import '../../../core/utils/media_utils.dart';
 import '../../../data/models/user_photo_model.dart';
+import '../../../data/services/media_download_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/chat/chat_labels.dart';
 import '../../widgets/media/photo_canvas.dart';
@@ -41,6 +45,7 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
   bool _loading = true;
   bool _busy = false;
   int _index = 0;
+  bool _downloading = false;
   String? _error;
 
   bool get _isSelf => widget.userId == null;
@@ -99,13 +104,20 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
   Future<void> _addPhoto() async {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      maxWidth: 1280,
-      imageQuality: 88,
+      maxWidth: 2048,
+      imageQuality: 92,
     );
     if (picked == null || !mounted) return;
+    // Point 2: the album shares the same cropper as the main avatar.
+    final cropped = await Navigator.of(context).push<File>(
+      MaterialPageRoute(
+        builder: (_) => AvatarCropScreen(imageFile: File(picked.path)),
+      ),
+    );
+    if (cropped == null || !mounted) return;
     await _run(() async {
       final api = ref.read(authenticatedSessionProvider).api;
-      final upload = await api.uploadFile('/media/upload', File(picked.path));
+      final upload = await api.uploadFile('/media/upload', cropped);
       final url = upload['url'] as String?;
       if (url == null || url.isEmpty) throw StateError('upload failed');
       await api.post('/users/me/photos', {
@@ -127,6 +139,34 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
     await api.post('/users/me/photos/${photo.id}/delete', {});
     await ref.read(authNotifierProvider.notifier).checkSession();
   });
+
+  /// Item 3: anyone can save another person's profile photo, exactly like
+  /// Telegram's "Save to gallery" action in the profile photo viewer.
+  Future<void> _downloadCurrent(List<String> urls) async {
+    if (_downloading || urls.isEmpty) return;
+    final safeIndex = _index < 0 || _index >= urls.length ? 0 : _index;
+    final url = urls[safeIndex];
+    final mediaId = _index < _photos.length ? _photos[safeIndex].mediaId : null;
+    setState(() => _downloading = true);
+    try {
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'profile_photo_$stamp.jpg';
+      await MediaDownloadService.downloadMedia(
+        mediaUrl: resolveMediaUrl(null, existingUrl: url),
+        fileName: fileName,
+        token: ref.read(authenticatedSessionProvider).token,
+        mediaId: mediaId,
+        messageType: 'image',
+      );
+      if (!mounted) return;
+      setState(() => _downloading = false);
+      SaveFeedback.success(context, fileName: fileName);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _downloading = false);
+      SaveFeedback.failure(context, error);
+    }
+  }
 
   ImageProvider _provider(String url) {
     final token = ref.read(authenticatedSessionProvider).token;
@@ -155,6 +195,22 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
               : (widget.title ?? labels.profilePhotos),
         ),
         actions: [
+          if (urls.isNotEmpty)
+            IconButton(
+              key: const ValueKey('download-profile-photo'),
+              tooltip: 'ذخیره عکس پروفایل',
+              icon: _downloading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.download_rounded),
+              onPressed: _downloading ? null : () => _downloadCurrent(urls),
+            ),
           if (canManage)
             IconButton(
               key: const ValueKey('add-profile-photo'),

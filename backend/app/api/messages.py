@@ -8,7 +8,7 @@ from app.models.chat import Chat, ChatMember
 from app.models.message import Message, MessageStatus, PinnedMessage, MessageHide
 from app.models.media import MediaFile
 from app.models.audit import AuditLog
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import and_, or_
 from app.services.chat_permissions import can, can_send, can_delete
 import os
@@ -169,6 +169,26 @@ def dispatch_scheduled_messages(chat_id=None):
             pass
 
 
+def _parse_iso(value):
+    """Parse an ISO-8601 timestamp from a query string into naive UTC.
+
+    Used by the polling cursor fallback. Anything unparseable returns None so
+    the caller degrades to "newest page" rather than raising.
+    """
+    if not value:
+        return None
+    text = str(value).strip()
+    if text.endswith('Z'):
+        text = text[:-1] + '+00:00'
+    try:
+        parsed = datetime.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
 def _pinned_count(chat_id):
     return PinnedMessage.query.filter_by(chat_id=chat_id, is_deleted=False).count()
 
@@ -203,15 +223,57 @@ def get_messages(chat_id):
     from_id = request.args.get('from_id')
     if sum(bool(v) for v in (after_id, before_id, from_id)) > 1:
         return jsonify({'error': 'فقط یک نشانگر پیام مجاز است'}), 400
+    # Point 4 (round 3): an `after_id` cursor may point at a message that has
+    # since been hard-deleted (admin purge, "delete for everyone" cleanup, a
+    # message the poller never re-fetched). Returning 404 froze the chat: the
+    # client kept sending the same dead cursor every 3 seconds and never saw a
+    # single new message until it was closed and reopened. This was most
+    # visible in busy groups and channels, exactly as reported.
+    #
+    # `after_since` lets the client hand us a timestamp fallback, and a dead
+    # *polling* cursor now degrades to "give me the newest page" instead of an
+    # error. Explicit navigation (`before_id`/`from_id`) still 404s, because
+    # silently jumping somewhere else would be wrong there.
+    after_since = request.args.get('after_since')
     cursor_id = after_id or before_id or from_id
     query = visible_messages(user_id, include_secure=secure_only).filter(Message.chat_id == chat_id)
+    cursor = None
     if cursor_id:
         # A cursor may have been deleted since the previous poll, but must
         # always belong to this chat. A reply jump must still be visible.
         cursor_query = query if from_id else Message.query.filter_by(chat_id=chat_id)
         cursor = cursor_query.filter(Message.id == cursor_id).first()
-        if cursor is None:
+    if cursor_id and cursor is None:
+        # A cursor that exists but belongs to a DIFFERENT chat is a client bug
+        # or a probe, never a stale poll: reject it so chat boundaries hold.
+        if not after_id or Message.query.filter_by(id=cursor_id).first() is not None:
             return jsonify({'error': 'پیام یافت نشد'}), 404
+        # Stale polling cursor: fall back to the timestamp the client last saw,
+        # or to the most recent page when it cannot tell us one.
+        fallback = _parse_iso(after_since)
+        if fallback is not None:
+            query = query.filter(Message.created_at > fallback)
+            rows = query.order_by(
+                Message.created_at.asc(), Message.id.asc(),
+            ).limit(limit + 1).all()
+            has_more = len(rows) > limit
+            return jsonify({
+                'messages': serialize_messages(rows[:limit], user_id),
+                'has_more': has_more,
+                'cursor_reset': True,
+            }), 200
+        rows = query.order_by(
+            Message.created_at.desc(), Message.id.desc(),
+        ).limit(limit).all()
+        rows.reverse()
+        return jsonify({
+            'messages': serialize_messages(rows, user_id),
+            'has_more': False,
+            # Tells the client its cursor was dropped, so it replaces rather
+            # than appends and cannot end up with duplicates.
+            'cursor_reset': True,
+        }), 200
+    if cursor is not None:
         if before_id:
             query = query.filter(or_(
                 Message.created_at < cursor.created_at,
@@ -281,6 +343,10 @@ def send_message():
     if not user_in_chat(user_id, chat_id):
         return jsonify({'error': 'دسترسی ندارید'}), 403
 
+    if message_type == 'poll':
+        # Polls are created through /api/v1/polls so question, options and
+        # votes are always validated and stored together.
+        return jsonify({'error': 'برای ساخت نظرسنجی از /polls استفاده کنید'}), 400
     if message_type not in ('text', 'image', 'video', 'voice', 'audio', 'music', 'file',
                             'sticker', 'gif', 'video_note', 'round_video',
                             'location', 'live_location'):
@@ -645,9 +711,36 @@ def forward_message(message_id):
             ((BlockList.blocked_id == user_id) & BlockList.blocker_id.in_(peers))).first():
             return jsonify({'error': 'Cannot forward to a blocked user'}), 403
 
+    # Telegram forwards a poll by copying it: the copy keeps the question and
+    # options but starts with a fresh, empty vote tally.
+    copied_poll_id = None
+    if original.message_type == 'poll' and original.poll_id:
+        from app.models.poll import Poll, PollOption
+        source_poll = db.session.get(Poll, original.poll_id)
+        if source_poll is None or source_poll.is_deleted:
+            return jsonify({'error': 'نظرسنجی در دسترس نیست'}), 400
+        copy = Poll(
+            chat_id=target_chat_id,
+            created_by=user_id,
+            question=source_poll.question,
+            poll_type=source_poll.poll_type,
+            is_anonymous=source_poll.is_anonymous,
+            allows_multiple_answers=source_poll.allows_multiple_answers,
+            explanation=source_poll.explanation,
+        )
+        db.session.add(copy)
+        db.session.flush()
+        for option in source_poll.options.all():
+            db.session.add(PollOption(
+                poll_id=copy.id, text=option.text,
+                position=option.position, is_correct=option.is_correct,
+            ))
+        copied_poll_id = copy.id
+
     new_msg = Message(
         chat_id=target_chat_id,
         sender_id=user_id,
+        poll_id=copied_poll_id,
         message_type=original.message_type,
         content=original.content,
         media_id=original.media_id,

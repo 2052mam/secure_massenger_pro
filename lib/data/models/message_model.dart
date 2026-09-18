@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 
 import 'user_model.dart';
 import 'reply_preview_model.dart';
+import 'poll_model.dart';
 import 'reaction_model.dart';
 
 /// Publishing admin signature (Telegram-like channel/group author label).
@@ -63,6 +64,9 @@ class MessageModel extends Equatable {
   final double? audioDuration;
   // Video editor: muted videos play silently on every client
   final bool isMuted;
+  // Polls & quizzes (Telegram parity): present for messageType == 'poll'.
+  final String? pollId;
+  final PollModel? poll;
   final DateTime createdAt;
   final String status; // sent | delivered | read
   final List<ReactionModel> reactions;
@@ -103,6 +107,8 @@ class MessageModel extends Equatable {
     this.audioArtist,
     this.audioDuration,
     this.isMuted = false,
+    this.pollId,
+    this.poll,
     required this.createdAt,
     this.status = 'sent',
     this.reactions = const [],
@@ -117,6 +123,7 @@ class MessageModel extends Equatable {
   bool get isLiveLocation => messageType == 'live_location';
   bool get isLiveActive => isLiveLocation && liveUntil != null && liveUntil!.isAfter(DateTime.now());
   bool get isMusic => messageType == 'audio' || messageType == 'music';
+  bool get isPoll => messageType == 'poll' && poll != null;
   bool get isVoiceOrMusic => messageType == 'voice' || isMusic;
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
@@ -172,6 +179,10 @@ class MessageModel extends Equatable {
       audioArtist: json['audio_artist'] as String?,
       audioDuration: (json['audio_duration'] as num?)?.toDouble(),
       isMuted: json['is_muted'] as bool? ?? false,
+      pollId: json['poll_id'] as String?,
+      poll: json['poll'] is Map<String, dynamic>
+          ? PollModel.fromJson(json['poll'] as Map<String, dynamic>)
+          : null,
       createdAt: json['created_at'] != null
           ? parseApiDateTime(json['created_at'] as String?) ?? DateTime.now()
           : DateTime.now(),
@@ -200,6 +211,7 @@ class MessageModel extends Equatable {
     DateTime? liveUntil,
     ReplyPreviewModel? replyTo,
     List<ReactionModel>? reactions,
+    PollModel? poll,
   }) {
     return MessageModel(
       id: id,
@@ -237,6 +249,8 @@ class MessageModel extends Equatable {
       audioArtist: audioArtist,
       audioDuration: audioDuration,
       isMuted: isMuted,
+      pollId: pollId,
+      poll: poll ?? this.poll,
       createdAt: createdAt,
       status: status ?? this.status,
       reactions: reactions ?? this.reactions,
@@ -298,6 +312,8 @@ class MessageModel extends Equatable {
     audioArtist,
     audioDuration,
     isMuted,
+    pollId,
+    poll,
     reactions,
   ];
 }

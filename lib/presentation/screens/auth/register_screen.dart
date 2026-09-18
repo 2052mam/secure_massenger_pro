@@ -11,7 +11,10 @@ import '../../widgets/chat/terms_dialog.dart';
 import 'phone_verification_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
-  const RegisterScreen({super.key});
+  const RegisterScreen({super.key, this.initialMobileNumber});
+
+  /// Prefilled when the login screen redirected an unregistered number here.
+  final String? initialMobileNumber;
 
   @override
   ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
@@ -28,6 +31,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscure = true;
   String? _error;
   bool _termsAccepted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final mobile = widget.initialMobileNumber?.trim();
+    if (mobile != null && mobile.isNotEmpty) _mobileCtrl.text = mobile;
+  }
 
   @override
   void dispose() {
@@ -58,7 +68,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     try {
       final deviceInfo = await DeviceService.getDeviceInfo();
       final username = _usernameCtrl.text.trim().toLowerCase();
-      print(_mobileCtrl.text);
       final res = await ApiService().post('/auth/register', {
         'email': _emailCtrl.text.trim().toLowerCase(),
         'mobile_number': _mobileCtrl.text.trim(),
@@ -78,6 +87,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             mobileNumber:
                 res['mobile_number'] as String? ?? _mobileCtrl.text.trim(),
             flow: PhoneVerificationFlow.registration,
+            deliveryChannel: res['delivery_channel'] as String? ?? 'sms',
+            resendAfterSeconds:
+                (res['resend_after_seconds'] as num?)?.toInt() ?? 300,
           ),
         ),
       );

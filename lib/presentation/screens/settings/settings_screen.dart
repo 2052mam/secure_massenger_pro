@@ -8,6 +8,7 @@ import '../../../data/services/background_poll_service.dart';
 import '../../../data/services/connection_service.dart';
 import '../../../data/services/notification_service.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/chat/chat_avatar.dart';
 import '../../providers/locale_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../chat/chat_screen.dart';
@@ -16,6 +17,7 @@ import 'account_switcher_screen.dart';
 import 'archive_lock_screen.dart';
 import 'background_connection_screen.dart';
 import 'device_management_screen.dart';
+import 'offline_media_screen.dart';
 import 'admin_reports_screen.dart';
 import 'sponsored_channels_screen.dart';
 import 'terms_screen.dart';
@@ -53,25 +55,16 @@ class SettingsScreen extends ConsumerWidget {
             ),
             if (user != null)
               ListTile(
-                leading: CircleAvatar(
+                // The avatar URL from the API is relative (`/api/v1/media/..`),
+                // so a bare NetworkImage silently failed to resolve and the
+                // user never saw their own photo here. ChatAvatar resolves the
+                // URL, attaches the bearer token only for our own origin and
+                // falls back to the initial when the image cannot load.
+                leading: ChatAvatar(
+                  title: user.displayName,
+                  url: user.avatarUrl,
+                  token: StorageService.getToken(),
                   radius: 28,
-                  backgroundImage: null,
-                  foregroundImage: user.avatarUrl != null
-                      ? NetworkImage(
-                          user.avatarUrl!,
-                          headers: {
-                            'Authorization':
-                                'Bearer ${StorageService.getToken() ?? ""}',
-                          },
-                        )
-                      : null,
-                  child: user.avatarUrl == null
-                      ? Text(
-                          user.displayName.isNotEmpty
-                              ? user.displayName[0]
-                              : '?',
-                        )
-                      : null,
                 ),
                 title: Text(
                   user.displayName,
@@ -228,6 +221,20 @@ class SettingsScreen extends ConsumerWidget {
               leading: const Icon(Icons.archive_outlined),
               title: Text(ChatLabels.of(context).archivedChats),
               onTap: () => openArchivedChats(context, ref),
+            ),
+            ListTile(
+              key: const ValueKey('offline-media-tile'),
+              leading: const Icon(Icons.download_done_outlined, color: Colors.green),
+              title: Text(isFa ? 'حافظه آفلاین رسانه' : 'Offline media storage'),
+              subtitle: Text(
+                isFa
+                    ? 'نگه‌داری عکس‌ها و فایل‌های ارسالی روی همین دستگاه (پشتیبان در برابر از دست رفتن اطلاعات سرور)'
+                    : 'Keeps sent media on this device as a safeguard against server data loss',
+                style: const TextStyle(fontSize: 12),
+              ),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const OfflineMediaScreen()),
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.devices_outlined),

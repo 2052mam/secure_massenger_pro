@@ -3,6 +3,11 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from app import db
 from app.models.user import User, UserDevice, UserSession
 from app.models.audit import AuditLog
+from app.services.security_alerts import (
+    is_primary_device,
+    primary_device,
+    record_alert,
+)
 from app.services.timestamps import utc_iso
 from datetime import datetime
 
@@ -40,6 +45,12 @@ def _device_payload(device, sessions, is_current):
         'created_at': created_at,
         'is_current': is_current,
         'sessions_count': len(sessions),
+        # Point 4: the owning device is flagged so the UI can show a badge and
+        # hide the remove button on every other device.
+        'is_primary': bool(getattr(device, 'is_primary', False)),
+        'primary_since': utc_iso(device.primary_since) if getattr(
+            device, 'primary_since', None) else None,
+        'can_terminate': not bool(getattr(device, 'is_primary', False)) or is_current,
     }
 
 
@@ -93,6 +104,14 @@ def terminate_device(device_id):
             'error': 'نمی‌توانید نشست فعلی را از همین دستگاه ببندید. برای خروج از گزینه «خروج از حساب» استفاده کنید.',
             'code': 'cannot_terminate_current',
         }), 400
+    # Point 4: the primary device belongs to the account owner. A secondary
+    # login must never be able to evict it, otherwise whoever logs in second
+    # could lock the real owner out of their own account.
+    if getattr(device, 'is_primary', False):
+        return jsonify({
+            'error': 'دستگاه اصلی حساب را فقط خودِ همان دستگاه می‌تواند حذف کند.',
+            'code': 'cannot_terminate_primary',
+        }), 403
     # Soft delete device and deactivate sessions. The JWT blocklist loader
     # revokes the terminated device's tokens on its very next request, so
     # the remote phone is signed out immediately (Item 4).
@@ -107,6 +126,11 @@ def terminate_device(device_id):
     UserSession.query.filter_by(
         device_id=device.id, is_active=True,
     ).update({'is_active': False}, synchronize_session=False)
+    record_alert(
+        user_id, 'device_terminated', 'یک دستگاه از حساب شما حذف شد',
+        body=f'دستگاه «{device.device_name or "ناشناس"}» از حساب شما خارج شد.',
+        severity='info', ip_address=get_client_ip(),
+    )
     db.session.add(AuditLog(
         actor_id=user_id, action='terminate_device', entity_type='device',
         entity_id=device_id, ip_address=get_client_ip(),
@@ -138,9 +162,15 @@ def terminate_others():
             reverse=True,
         )
         keep_id = devices_sorted[0].id
+    caller_is_primary = is_primary_device(user_id, keep_id)
     terminated = 0
+    skipped_primary = False
     for d in devices:
         if d.id == keep_id:
+            continue
+        # Only the primary device itself may sweep the primary device away.
+        if getattr(d, 'is_primary', False) and not caller_is_primary:
+            skipped_primary = True
             continue
         d.is_deleted = True
         d.deleted_at = datetime.utcnow()
@@ -157,7 +187,15 @@ def terminate_others():
         entity_type='user', entity_id=user_id, ip_address=get_client_ip(),
     ))
     db.session.commit()
-    return jsonify({'ok': True, 'terminated': terminated}), 200
+    return jsonify({
+        'ok': True,
+        'terminated': terminated,
+        'skipped_primary': skipped_primary,
+        'message': (
+            'دستگاه اصلی حساب حذف نشد؛ فقط خودِ آن دستگاه می‌تواند آن را حذف کند.'
+            if skipped_primary else 'سایر دستگاه‌ها خارج شدند.'
+        ),
+    }), 200
 
 
 @devices_bp.route('/sessions', methods=['GET'])
@@ -281,3 +319,59 @@ def notifications():
                     'severity': 'info',
                 })
     return jsonify({'notifications': notifications}), 200
+
+
+@devices_bp.route('/primary', methods=['GET'])
+@jwt_required()
+def get_primary_device():
+    """Who owns this account, and is the caller that device? (Point 4)"""
+    user_id = get_jwt_identity()
+    current_device_id = get_jwt().get('device_id')
+    owner = primary_device(user_id)
+    return jsonify({
+        'primary_device_id': owner.id if owner else None,
+        'primary_device_name': owner.device_name if owner else None,
+        'primary_since': utc_iso(owner.primary_since) if owner and owner.primary_since else None,
+        'is_primary_device': is_primary_device(user_id, current_device_id),
+        'current_device_id': current_device_id,
+    }), 200
+
+
+@devices_bp.route('/primary/transfer', methods=['POST'])
+@jwt_required()
+def transfer_primary_device():
+    """Hand account ownership to another device.
+
+    Only the current primary device may do this, which is the one safe way to
+    move ownership when the owner replaces their phone. Body: {device_id}.
+    """
+    user_id = get_jwt_identity()
+    current_device_id = get_jwt().get('device_id')
+    if not is_primary_device(user_id, current_device_id):
+        return jsonify({
+            'error': 'فقط دستگاه اصلی می‌تواند مالکیت حساب را منتقل کند.',
+            'code': 'primary_device_required',
+        }), 403
+    data = request.get_json(silent=True) or {}
+    target_id = data.get('device_id')
+    target = UserDevice.query.filter_by(
+        id=target_id, user_id=user_id, is_deleted=False,
+    ).first()
+    if not target:
+        return jsonify({'error': 'دستگاه یافت نشد'}), 404
+    UserDevice.query.filter_by(user_id=user_id, is_primary=True).update(
+        {'is_primary': False}, synchronize_session=False)
+    target.is_primary = True
+    target.primary_since = datetime.utcnow()
+    record_alert(
+        user_id, 'primary_device_changed', 'دستگاه اصلی حساب تغییر کرد',
+        body=f'دستگاه اصلی به «{target.device_name or "دستگاه جدید"}» منتقل شد.',
+        severity='warning', device=target, ip_address=get_client_ip(),
+    )
+    db.session.add(AuditLog(
+        actor_id=user_id, action='transfer_primary_device',
+        entity_type='device', entity_id=target.id,
+        ip_address=get_client_ip(),
+    ))
+    db.session.commit()
+    return jsonify({'ok': True, 'primary_device_id': target.id}), 200

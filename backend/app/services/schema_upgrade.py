@@ -63,12 +63,18 @@ def upgrade_schema():
             'is_muted': 'BOOLEAN NOT NULL DEFAULT 0',
             'view_duration': 'INTEGER NULL',
             'view_expires_at': 'DATETIME NULL',
+            # Polls & quizzes (Telegram parity).
+            'poll_id': 'VARCHAR(36) NULL',
         },
         'user_devices': {
             'push_token': 'VARCHAR(512) NULL',
             'push_platform': 'VARCHAR(20) NULL',
             'notifications_enabled': 'BOOLEAN NOT NULL DEFAULT 1',
             'deleted_by': 'VARCHAR(36) NULL',
+            # Primary (owning) device: only it may remove itself, enable 2FA
+            # or set the archive lock.
+            'is_primary': 'BOOLEAN NOT NULL DEFAULT 0',
+            'primary_since': 'DATETIME NULL',
         },
         'media_files': {
             'title': 'VARCHAR(200) NULL',
@@ -108,6 +114,8 @@ def upgrade_schema():
     from app.models.message import MessageReaction  # ensure exists
     from app.models.story import Story, StoryView  # noqa: F401
     from app.models.user import PhoneVerification  # noqa: F401
+    from app.models.poll import Poll, PollOption, PollVote  # noqa: F401
+    from app.models.support import SecurityAlert, SupportTicket  # noqa: F401
 
     db.metadata.create_all(bind=db.engine)
     # Also ensure specific tables exist individually for older SQLAlchemy metadata
@@ -117,4 +125,40 @@ def upgrade_schema():
         Report.__table__, StickerPack.__table__, Sticker.__table__, SavedGif.__table__,
         MessageReaction.__table__,
         Story.__table__, StoryView.__table__, PhoneVerification.__table__,
+        Poll.__table__, PollOption.__table__, PollVote.__table__,
+        SupportTicket.__table__, SecurityAlert.__table__,
     ])
+
+    # Existing installs created before the primary-device rule have no owner
+    # device at all, which would leave 2FA/archive-lock open to any session.
+    # Backfill the oldest surviving device of each account as its primary.
+    _backfill_primary_devices()
+
+
+def _backfill_primary_devices():
+    from sqlalchemy import func as _func
+    from app.models.user import UserDevice
+
+    owned = {
+        row[0] for row in db.session.query(UserDevice.user_id).filter(
+            UserDevice.is_primary.is_(True),
+            UserDevice.is_deleted.is_(False),
+        ).distinct().all()
+    }
+    candidates = db.session.query(
+        UserDevice.user_id, _func.min(UserDevice.created_at),
+    ).filter(UserDevice.is_deleted.is_(False)).group_by(
+        UserDevice.user_id).all()
+    changed = False
+    for user_id, created_at in candidates:
+        if user_id in owned:
+            continue
+        device = UserDevice.query.filter_by(
+            user_id=user_id, created_at=created_at, is_deleted=False,
+        ).first()
+        if device is not None:
+            device.is_primary = True
+            device.primary_since = device.created_at
+            changed = True
+    if changed:
+        db.session.commit()
