@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'avatar_crop_screen.dart';
+
 import '../../../core/utils/media_utils.dart';
 import '../../../data/models/user_photo_model.dart';
 import '../../../data/services/media_download_service.dart';
@@ -101,13 +103,20 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
   Future<void> _addPhoto() async {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      maxWidth: 1280,
-      imageQuality: 88,
+      maxWidth: 2048,
+      imageQuality: 92,
     );
     if (picked == null || !mounted) return;
+    // Point 2: the album shares the same cropper as the main avatar.
+    final cropped = await Navigator.of(context).push<File>(
+      MaterialPageRoute(
+        builder: (_) => AvatarCropScreen(imageFile: File(picked.path)),
+      ),
+    );
+    if (cropped == null || !mounted) return;
     await _run(() async {
       final api = ref.read(authenticatedSessionProvider).api;
-      final upload = await api.uploadFile('/media/upload', File(picked.path));
+      final upload = await api.uploadFile('/media/upload', cropped);
       final url = upload['url'] as String?;
       if (url == null || url.isEmpty) throw StateError('upload failed');
       await api.post('/users/me/photos', {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +17,7 @@ import '../../../core/utils/chat_search.dart';
 import '../../../data/models/chat_model.dart';
 import '../../../data/services/api_service.dart';
 import '../chat/chat_screen.dart';
+import '../settings/device_management_screen.dart';
 import '../../widgets/chat/chat_labels.dart';
 import '../../widgets/chat/chat_list_actions.dart';
 import '../../widgets/chat/chat_list_tile.dart';
@@ -218,7 +221,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             final itemCount = chats.length + (showArchiveRow ? 1 : 0);
             return Column(
               children: [
-                if (!searching) const _DeviceLoginBanner(),
+                if (!searching) const _SecurityAlertBanner(),
                 if (!searching) const StoryBar(),
                 if (!searching && _selectedFolderId == null)
                   const _SponsoredStrip(),
@@ -552,44 +555,164 @@ class _ArchiveRow extends StatelessWidget {
 }
 
 
-class _DeviceLoginBanner extends StatefulWidget {
-  const _DeviceLoginBanner();
+/// Point 3: account-security banner.
+///
+/// The old version fetched `/devices/notifications` exactly once when the
+/// widget mounted, so an alert raised while the user sat on the chat list only
+/// appeared after a full app restart — that was the "arrives very late"
+/// complaint. It now polls the dedicated `/security/alerts` feed, shows the
+/// newest undismissed alert immediately, and dismissing it tells the server so
+/// the alert does not come back on another device.
+class _SecurityAlertBanner extends ConsumerStatefulWidget {
+  const _SecurityAlertBanner();
+
   @override
-  State<_DeviceLoginBanner> createState() => _DeviceLoginBannerState();
+  ConsumerState<_SecurityAlertBanner> createState() =>
+      _SecurityAlertBannerState();
 }
-class _DeviceLoginBannerState extends State<_DeviceLoginBanner> {
-  List<dynamic> _notifs = [];
-  bool _dismissed = false;
+
+class _SecurityAlertBannerState extends ConsumerState<_SecurityAlertBanner> {
+  static const Duration _pollInterval = Duration(seconds: 20);
+
+  Map<String, dynamic>? _alert;
+  Timer? _timer;
+  bool _busy = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _timer = Timer.periodic(_pollInterval, (_) => _load());
   }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    if (!mounted) return;
     try {
-      final res = await ApiService().get('/devices/notifications');
-      final list = res['messages'] as List? ?? res['notifications'] as List? ?? [];
-      if (mounted && list.isNotEmpty) setState(()=> _notifs = list.take(1).toList());
-    } catch (_) {}
+      final api = ref.read(authenticatedSessionProvider).api;
+      final response = await api.get('/security/alerts',
+          query: {'unread': '1', 'limit': '1'});
+      if (!mounted) return;
+      final alerts = response['alerts'] as List? ?? const [];
+      setState(() {
+        _alert = alerts.isEmpty
+            ? null
+            : Map<String, dynamic>.from(alerts.first as Map);
+      });
+    } catch (_) {
+      // Offline or a transient error: keep whatever is already on screen.
+    }
   }
+
+  Future<void> _dismiss() async {
+    final alert = _alert;
+    if (alert == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _alert = null;
+    });
+    try {
+      final api = ref.read(authenticatedSessionProvider).api;
+      await api.post('/security/alerts/${alert['id']}/dismiss', {});
+    } catch (_) {
+      // The banner is already hidden locally; the next poll re-syncs.
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _openDevices() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DeviceManagementScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_dismissed || _notifs.isEmpty) return const SizedBox.shrink();
-    final msg = _notifs.first as Map<String,dynamic>;
-    final content = (msg['content'] as String? ?? 'ورود جدید به حساب شما').split('\n').first;
+    final alert = _alert;
+    if (alert == null) return const SizedBox.shrink();
+
+    final critical = alert['severity'] == 'critical';
+    final accent = critical ? Colors.red : Colors.orange;
+    final title = (alert['title'] as String?)?.trim();
+    final body = (alert['body'] as String?)?.trim();
+
     return Container(
+      key: const ValueKey('security-alert-banner'),
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.orange.withValues(alpha: 0.3))),
-      child: Row(children: [
-        const Icon(Icons.security, color: Colors.orange, size: 22),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(content, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87), maxLines: 2, overflow: TextOverflow.ellipsis),
-          const Text('این هشدار مانند تلگرام در «پیام‌های ذخیره‌شده» هم ذخیره شده است. اگر شما نبودید، فوراً رمز را تغییر دهید و نشست را ببندید.', style: TextStyle(fontSize: 11, color: Colors.grey)),
-        ])),
-        IconButton(icon: const Icon(Icons.close, size: 18), onPressed: ()=> setState(()=> _dismissed=true)),
-      ]),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: _openDevices,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  critical ? Icons.gpp_maybe : Icons.security,
+                  color: accent,
+                  size: 24,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title?.isNotEmpty == true
+                            ? title!
+                            : 'رویداد امنیتی در حساب شما',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: accent.shade900,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (body?.isNotEmpty == true) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          body!,
+                          style: const TextStyle(
+                              fontSize: 11.5, color: Colors.black87),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      const SizedBox(height: 4),
+                      Text(
+                        'برای مدیریت دستگاه‌ها ضربه بزنید',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: accent.shade700),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'بستن',
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: _busy ? null : _dismiss,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

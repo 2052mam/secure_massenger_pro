@@ -10,6 +10,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/chat/chat_avatar.dart';
 import 'phone_verification_screen.dart';
 import 'register_screen.dart';
+import 'support_contact_sheet.dart';
 import 'two_factor_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -117,6 +118,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           verificationId: verificationId,
           mobileNumber: response['mobile_number'] as String? ?? mobile,
           flow: PhoneVerificationFlow.login,
+          // Point 3: the server decides between an in-app code and an SMS.
+          deliveryChannel: response['delivery_channel'] as String? ?? 'sms',
+          resendAfterSeconds:
+              (response['resend_after_seconds'] as num?)?.toInt() ?? 300,
         ),
       ),
     );
@@ -136,6 +141,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         builder: (_) => RegisterScreen(initialMobileNumber: mobileNumber),
       ),
     );
+  }
+
+  /// Point 6: opens the support sheet with whatever number was typed.
+  Future<void> _contactSupport() async {
+    final sent = await showSupportContactSheet(
+      context,
+      mobileNumber: _mobileCtrl.text.trim().isEmpty
+          ? null
+          : _mobileCtrl.text.trim(),
+      initialTopic: 'login_problem',
+    );
+    if (sent && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('پیام شما برای پشتیبانی ثبت شد.'),
+        ),
+      );
+    }
   }
 
   Future<void> _submitLegacy() async {
@@ -325,6 +348,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     child: const Text('حساب ندارید؟ ثبت‌نام کنید'),
+                  ),
+                  const Divider(height: 24),
+                  // Point 6: reachable before the user has any session.
+                  TextButton.icon(
+                    key: const ValueKey('login-contact-support'),
+                    onPressed: _loading ? null : _contactSupport,
+                    icon: const Icon(Icons.support_agent, size: 18),
+                    label: const Text('مشکلی در ورود دارید؟ تماس با پشتیبانی'),
                   ),
                   if (canPop)
                     TextButton.icon(

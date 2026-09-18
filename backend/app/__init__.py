@@ -37,7 +37,7 @@ def create_app():
     app.config['SMS_IR_TEMPLATE_PARAMETERS'] = os.getenv('SMS_IR_TEMPLATE_PARAMETERS', '')
     app.config['SMS_IR_TIMEOUT_SECONDS'] = int(os.getenv('SMS_IR_TIMEOUT_SECONDS', 10))
     app.config['PHONE_CODE_TTL_SECONDS'] = int(os.getenv('PHONE_CODE_TTL_SECONDS', 600))
-    app.config['PHONE_CODE_RESEND_SECONDS'] = int(os.getenv('PHONE_CODE_RESEND_SECONDS', 60))
+    app.config['PHONE_CODE_RESEND_SECONDS'] = int(os.getenv('PHONE_CODE_RESEND_SECONDS', 300))
     app.config['PHONE_CODE_MAX_ATTEMPTS'] = int(os.getenv('PHONE_CODE_MAX_ATTEMPTS', 5))
     app.config['PHONE_CODE_MAX_PER_HOUR'] = int(os.getenv('PHONE_CODE_MAX_PER_HOUR', 5))
     app.config['PHONE_CODE_MAX_PER_IP_HOUR'] = int(os.getenv('PHONE_CODE_MAX_PER_IP_HOUR', 20))

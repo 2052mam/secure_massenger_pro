@@ -222,6 +222,7 @@ class ApiService {
       statusCode: res.statusCode,
       message: message,
       code: code,
+      details: body,
     );
   }
 
@@ -254,11 +255,17 @@ class ApiException implements Exception {
   final int statusCode;
   final String message;
   final String? code;
+
+  /// The full decoded JSON error body, so callers can read extra fields such
+  /// as `retry_after_seconds` on a 429 without re-parsing the response.
+  final Map<String, dynamic> details;
+
   ApiException({
     required this.statusCode,
     required this.message,
     this.code,
-  });
+    Map<String, dynamic>? details,
+  }) : details = details ?? const {};
 
   /// True when the current device was signed out remotely.
   bool get isDeviceTerminated =>

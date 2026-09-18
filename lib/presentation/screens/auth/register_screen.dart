@@ -87,6 +87,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             mobileNumber:
                 res['mobile_number'] as String? ?? _mobileCtrl.text.trim(),
             flow: PhoneVerificationFlow.registration,
+            deliveryChannel: res['delivery_channel'] as String? ?? 'sms',
+            resendAfterSeconds:
+                (res['resend_after_seconds'] as num?)?.toInt() ?? 300,
           ),
         ),
       );
