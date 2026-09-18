@@ -104,31 +104,72 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('ثبت‌نام')),
+      appBar: AppBar(
+        title: const Text('ثبت‌نام', style: TextStyle(fontWeight: FontWeight.w700)),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 20),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Center(
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFF2AABEE),
+                          primary,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primary.withValues(alpha: 0.3),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.person_add_rounded, size: 36, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 20),
                 const Text(
                   'ایجاد حساب جدید',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'برای ادامه، یک کد تأیید با پیامک ارسال می‌شود. Google Authenticator اختیاری است.',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(
+                    color: theme.textTheme.bodySmall?.color,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 26),
                 TextFormField(
                   controller: _displayNameCtrl,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'نام نمایشی',
-                    prefixIcon: Icon(Icons.person_outline),
+                    prefixIcon: Icon(Icons.person_outline_rounded, color: primary),
                   ),
                   validator: (v) => (v == null || v.trim().length < 2)
                       ? 'حداقل ۲ کاراکتر'
@@ -137,9 +178,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _usernameCtrl,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'آیدی (اختیاری)',
-                    prefixIcon: Icon(Icons.alternate_email),
+                    prefixIcon: Icon(Icons.alternate_email_rounded, color: primary),
                     helperText:
                         'فقط حروف کوچک، عدد و _ — بعداً هم می‌توانید بسازید',
                   ),
@@ -147,8 +188,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     final t = (v ?? '').trim();
                     if (t.isEmpty) return null;
                     if (t.length < 3 || t.length > 30) return '۳ تا ۳۰ کاراکتر';
-                    if (!RegExp(r'^[a-z0-9_]+$').hasMatch(t))
+                    if (!RegExp(r'^[a-z0-9_]+$').hasMatch(t)) {
                       return 'فرمت نامعتبر';
+                    }
                     return null;
                   },
                 ),
@@ -156,9 +198,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 TextFormField(
                   controller: _emailCtrl,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'ایمیل',
-                    prefixIcon: Icon(Icons.email_outlined),
+                    prefixIcon: Icon(Icons.email_outlined, color: primary),
                   ),
                   validator: (v) {
                     if (v == null || !v.contains('@')) return 'ایمیل نامعتبر';
@@ -169,10 +211,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 TextFormField(
                   controller: _mobileCtrl,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
+                  textDirection: TextDirection.ltr,
+                  decoration: InputDecoration(
                     labelText: 'شماره موبایل',
                     hintText: '09149141414',
-                    prefixIcon: Icon(Icons.phone_outlined),
+                    hintTextDirection: TextDirection.ltr,
+                    prefixIcon: Icon(Icons.phone_outlined, color: primary),
                     helperText: 'با کد کشور وارد کنید؛ مثال: 09121234567',
                   ),
                   validator: (v) {
@@ -192,10 +236,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   obscureText: _obscure,
                   decoration: InputDecoration(
                     labelText: 'رمز عبور',
-                    prefixIcon: const Icon(Icons.lock_outline),
+                    prefixIcon: Icon(Icons.lock_outline_rounded, color: primary),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscure ? Icons.visibility_off : Icons.visibility,
+                        _obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
                       ),
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
@@ -203,54 +247,67 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   validator: (v) =>
                       (v == null || v.length < 8) ? 'حداقل ۸ کاراکتر' : null,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 18),
                 InkWell(
                   onTap: _showTerms,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                   child: Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       border: Border.all(
                         color: _termsAccepted
-                            ? Colors.green
-                            : Colors.grey.shade300,
+                            ? const Color(0xFF4CAF50)
+                            : theme.dividerColor.withValues(alpha: 0.5),
+                        width: _termsAccepted ? 1.5 : 1.0,
                       ),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                       color: _termsAccepted
-                          ? Colors.green.withValues(alpha: 0.06)
+                          ? const Color(0xFF4CAF50).withValues(alpha: 0.08)
                           : null,
                     ),
                     child: Row(
                       children: [
                         Icon(
                           _termsAccepted
-                              ? Icons.check_circle
-                              : Icons.rule_outlined,
-                          color: _termsAccepted ? Colors.green : Colors.grey,
+                              ? Icons.check_circle_rounded
+                              : Icons.rule_rounded,
+                          color: _termsAccepted ? const Color(0xFF4CAF50) : primary,
+                          size: 26,
                         ),
-                        const SizedBox(width: 10),
-                        const Expanded(
+                        const SizedBox(width: 12),
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
+                              const Text(
                                 'قوانین و مقررات',
-                                style: TextStyle(fontWeight: FontWeight.w700),
+                                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                               ),
                               Text(
                                 'برای مطالعه و پذیرش لمس کنید (اسکرول تا انتها)',
                                 style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey,
+                                  fontSize: 12,
+                                  color: theme.textTheme.bodySmall?.color,
                                 ),
                               ),
                             ],
                           ),
                         ),
                         if (_termsAccepted)
-                          const Text(
-                            'پذیرفته شد',
-                            style: TextStyle(color: Colors.green, fontSize: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4CAF50).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'پذیرفته شد',
+                              style: TextStyle(
+                                color: Color(0xFF2E7D32),
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                       ],
                     ),
@@ -258,25 +315,47 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 16),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.red, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 24),
                 SizedBox(
-                  height: 50,
+                  height: 52,
                   child: ElevatedButton(
                     onPressed: _loading ? null : _submit,
+                    style: ElevatedButton.styleFrom(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
                     child: _loading
                         ? const SizedBox(
                             width: 24,
                             height: 24,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
+                              strokeWidth: 2.2,
                               color: Colors.white,
                             ),
                           )
-                        : const Text('ثبت‌نام و ادامه'),
+                        : const Text(
+                            'ثبت‌نام و ادامه',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
                   ),
                 ),
+                const SizedBox(height: 16),
               ],
             ),
           ),

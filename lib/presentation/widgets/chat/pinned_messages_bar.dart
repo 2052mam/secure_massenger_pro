@@ -43,71 +43,89 @@ class PinnedMessagesBar extends StatelessWidget {
     if (pinned.isEmpty) return const SizedBox.shrink();
     final labels = ChatLabels.of(context);
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primary = theme.colorScheme.primary;
     final safeIndex = index < 0 || index >= pinned.length ? 0 : index;
     final message = pinned[safeIndex];
 
     return Material(
-      color: theme.colorScheme.surface,
+      color: isDark ? const Color(0xFF17212B) : const Color(0xFFF8FAFC),
       child: InkWell(
         key: const ValueKey('pinned-bar'),
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.25)),
+              bottom: BorderSide(
+                color: theme.dividerColor.withValues(alpha: 0.35),
+                width: 0.8,
+              ),
             ),
           ),
           padding: const EdgeInsetsDirectional.only(
             start: 12,
-            end: 4,
-            top: 6,
-            bottom: 6,
+            end: 6,
+            top: 7,
+            bottom: 7,
           ),
           child: Row(
             children: [
+              // Vertical colored accent bar
               Container(
-                width: 3,
-                height: 34,
+                width: 3.5,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary,
+                  color: primary,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(width: 10),
+              Icon(
+                Icons.push_pin_rounded,
+                size: 18,
+                color: primary,
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      pinned.length == 1
-                          ? labels.pinnedMessages
-                          : '${labels.pinnedMessages} '
-                                '${safeIndex + 1}/${pinned.length}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.primary,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          pinned.length > 1
+                              ? '${labels.pinnedMessage} (${safeIndex + 1}/${pinned.length})'
+                              : labels.pinnedMessage,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: primary,
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 1),
                     Text(
                       messagePreviewText(context, message),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.85),
+                      ),
                     ),
                   ],
                 ),
               ),
-              IconButton(
-                key: const ValueKey('pinned-bar-list'),
-                tooltip: labels.pinnedMessages,
-                icon: const Icon(Icons.format_list_bulleted_rounded, size: 20),
-                onPressed: onShowAll,
-              ),
+              if (pinned.length > 1)
+                IconButton(
+                  tooltip: 'همه پیام‌های پین‌شده',
+                  icon: const Icon(Icons.format_list_bulleted_rounded, size: 20),
+                  onPressed: onShowAll,
+                ),
               if (onUnpin != null)
                 IconButton(
-                  key: const ValueKey('pinned-bar-unpin'),
                   tooltip: labels.unpinMessage,
                   icon: const Icon(Icons.close_rounded, size: 20),
                   onPressed: onUnpin,

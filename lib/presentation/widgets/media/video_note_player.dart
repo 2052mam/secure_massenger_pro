@@ -61,7 +61,21 @@ class _VideoNotePlayerState extends State<VideoNotePlayer> {
       child: Container(
         width: widget.size,
         height: widget.size,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.black,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF2AABEE).withValues(alpha: 0.25),
+              blurRadius: 12,
+              spreadRadius: 2,
+            ),
+          ],
+          border: Border.all(
+            color: const Color(0xFF2AABEE).withValues(alpha: 0.6),
+            width: 2.5,
+          ),
+        ),
         clipBehavior: Clip.hardEdge,
         child: Stack(
           alignment: Alignment.center,
@@ -78,24 +92,47 @@ class _VideoNotePlayerState extends State<VideoNotePlayer> {
                 ),
               )
             else
-              const Icon(Icons.videocam, color: Colors.white70, size: 48),
+              const Icon(Icons.videocam_rounded, color: Colors.white70, size: 48),
             if (!_isPlaying)
               Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                child: const Icon(Icons.play_arrow, color: Colors.white, size: 32),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
+                ),
+                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36),
               ),
             Positioned(
-              bottom: 10,
+              bottom: 12,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 0.8,
+                  ),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.videocam, size: 12, color: Colors.white),
+                    const Icon(Icons.videocam_rounded, size: 13, color: Colors.white),
                     const SizedBox(width: 4),
-                    Text(_controller != null && _initialized ? formatMediaDuration(_controller!.value.duration) : '0:00', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                    Text(
+                      _controller != null && _initialized
+                          ? formatMediaDuration(_controller!.value.duration)
+                          : '0:00',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),

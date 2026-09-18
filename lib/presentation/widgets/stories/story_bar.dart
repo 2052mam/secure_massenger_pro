@@ -53,10 +53,7 @@ class StoryFeedNotifier extends StateNotifier<AsyncValue<List<StoryGroup>>> {
 }
 
 /// Telegram-like story tray shown on top of the chat list.
-///
-/// Every state (loading / empty / data / error) renders at exactly
-/// [_trayHeight] so the chat list never jumps, and the avatar column is
-/// height-bounded so a large system font cannot overflow the row.
+/// Redesigned with sunset rainbow gradient rings, fluid avatars, and clean spacing.
 class StoryBar extends ConsumerWidget {
   const StoryBar({super.key});
 
@@ -73,8 +70,8 @@ class StoryBar extends ConsumerWidget {
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: theme.dividerColor.withValues(alpha: 0.4),
-                width: 0.5,
+                color: theme.dividerColor.withValues(alpha: 0.35),
+                width: 0.8,
               ),
             ),
           ),
@@ -83,15 +80,17 @@ class StoryBar extends ConsumerWidget {
 
     return feed.when(
       loading: () => shell(
-        const Center(
+        Center(
           child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.colorScheme.primary,
+            ),
           ),
         ),
       ),
-      // An error must not remove the tray: the user still needs "add story".
       error: (_, __) => shell(
         _StoryStrip(
           entries: [
@@ -208,9 +207,9 @@ class _StoryStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.separated(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       itemCount: entries.length,
-      separatorBuilder: (_, __) => const SizedBox(width: 10),
+      separatorBuilder: (_, __) => const SizedBox(width: 12),
       itemBuilder: (context, i) => _StoryAvatar(entry: entries[i]),
     );
   }
@@ -220,19 +219,27 @@ class _StoryAvatar extends StatelessWidget {
   final _StoryEntry entry;
   const _StoryAvatar({required this.entry});
 
+  static const _sunsetGradient = LinearGradient(
+    colors: [
+      Color(0xFFF58529),
+      Color(0xFFDD2A7B),
+      Color(0xFF8134AF),
+      Color(0xFF515BD4),
+    ],
+    begin: Alignment.bottomLeft,
+    end: Alignment.topRight,
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final showRing = entry.hasUnseen || (entry.isMine && entry.hasStory);
-    final ringColor = entry.hasUnseen
-        ? theme.colorScheme.primary
-        : theme.dividerColor.withValues(alpha: 0.5);
 
     return GestureDetector(
       onTap: entry.isMine && entry.onView != null ? entry.onView : entry.onTap,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        width: 66,
+        width: 68,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -241,70 +248,100 @@ class _StoryAvatar extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  width: 56,
-                  height: 56,
-                  padding: const EdgeInsets.all(2),
+                  width: 58,
+                  height: 58,
+                  padding: const EdgeInsets.all(2.5),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: showRing ? ringColor : Colors.transparent,
-                      width: 2,
-                    ),
+                    gradient: showRing ? _sunsetGradient : null,
+                    border: showRing
+                        ? null
+                        : Border.all(
+                            color: theme.dividerColor.withValues(alpha: 0.3),
+                            width: 1.5,
+                          ),
                   ),
-                  child: CircleAvatar(
-                    backgroundColor:
-                        theme.colorScheme.primary.withValues(alpha: 0.15),
-                    backgroundImage: entry.avatarUrl != null
-                        ? NetworkImage(entry.avatarUrl!, headers: {
-                            'Authorization':
-                                'Bearer ${StorageService.getToken() ?? ""}',
-                          })
-                        : null,
-                    child: entry.avatarUrl == null
-                        ? Text(
-                            entry.displayName.isNotEmpty
-                                ? entry.displayName.characters.first
-                                : '+',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          )
-                        : null,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: theme.scaffoldBackgroundColor,
+                      border: Border.all(
+                        color: theme.scaffoldBackgroundColor,
+                        width: showRing ? 2 : 0,
+                      ),
+                    ),
+                    child: CircleAvatar(
+                      backgroundColor:
+                          theme.colorScheme.primary.withValues(alpha: 0.15),
+                      backgroundImage: entry.avatarUrl != null
+                          ? NetworkImage(entry.avatarUrl!, headers: {
+                              'Authorization':
+                                  'Bearer ${StorageService.getToken() ?? ""}',
+                            })
+                          : null,
+                      child: entry.avatarUrl == null
+                          ? Text(
+                              entry.displayName.isNotEmpty
+                                  ? entry.displayName.characters.first
+                                  : '+',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 18,
+                                color: theme.colorScheme.primary,
+                              ),
+                            )
+                          : null,
+                    ),
                   ),
                 ),
                 if (entry.isMine)
                   Positioned(
-                    bottom: -1,
-                    right: -1,
+                    bottom: 0,
+                    right: 0,
                     child: GestureDetector(
                       onTap: entry.onTap,
                       child: Container(
-                        padding: const EdgeInsets.all(2),
+                        padding: const EdgeInsets.all(3),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primary,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF2AABEE), Color(0xFF2481CC)],
+                          ),
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: theme.scaffoldBackgroundColor,
                             width: 2,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 4,
+                            ),
+                          ],
                         ),
-                        child: const Icon(Icons.add,
-                            size: 11, color: Colors.white),
+                        child: const Icon(
+                          Icons.add_rounded,
+                          size: 13,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
               ],
             ),
-            const SizedBox(height: 4),
-            // Fixed slot for the caption: text can never push the column past
-            // the tray height, whatever the system font scale is.
+            const SizedBox(height: 5),
             SizedBox(
               height: 14,
-              width: 66,
+              width: 68,
               child: Text(
                 entry.label,
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 10, height: 1.2),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  height: 1.2,
+                ),
                 textScaler: TextScaler.noScaling,
               ),
             ),

@@ -83,20 +83,51 @@ class _TwoFactorScreenState extends ConsumerState<TwoFactorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('تأیید دو مرحله‌ای')),
+      appBar: AppBar(
+        title: const Text('تأیید دو مرحله‌ای', style: TextStyle(fontWeight: FontWeight.w700)),
+      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.security, size: 64, color: Colors.blue),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF2AABEE),
+                        primary,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primary.withValues(alpha: 0.3),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.shield_rounded, size: 42, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 24),
               Text(
                 widget.isPhoneLogin
                     ? 'پیامک تأیید شد. کد Google Authenticator را وارد کنید'
                     : 'کد Google Authenticator را وارد کنید',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 32),
@@ -104,29 +135,69 @@ class _TwoFactorScreenState extends ConsumerState<TwoFactorScreen> {
                 controller: _codeCtrl,
                 keyboardType: TextInputType.number,
                 maxLength: 6,
+                autofocus: true,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 28, letterSpacing: 10),
-                decoration: const InputDecoration(labelText: 'کد ۶ رقمی', counterText: ''),
+                style: const TextStyle(
+                  fontSize: 32,
+                  letterSpacing: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'کد ۶ رقمی',
+                  counterText: '',
+                  hintText: '• • • • • •',
+                  hintStyle: TextStyle(
+                    color: Colors.grey.shade400,
+                    letterSpacing: 10,
+                    fontSize: 26,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 onSubmitted: (_) => _submit(),
               ),
               if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               ],
               const SizedBox(height: 24),
               SizedBox(
-                width: double.infinity,
-                height: 50,
+                height: 52,
                 child: ElevatedButton(
                   onPressed: _loading ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
                   child: _loading
                       ? const SizedBox(
                           width: 24,
                           height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
                         )
-                      : const Text('تأیید'),
+                      : const Text(
+                          'تأیید',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
                 ),
               ),
             ],

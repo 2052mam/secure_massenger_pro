@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shimmer/shimmer.dart';
 import '../chat/create_channel_screen.dart';
 
 import 'main_shell.dart';
@@ -73,8 +74,6 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     List<ChatFolderModel> folders, {
     List<ChatModel> archived = const [],
   }) {
-    // While searching, Telegram ignores the folder filter and looks through
-    // every conversation — including archived groups and channels.
     if (_query.trim().isNotEmpty) {
       final pool = <ChatModel>[...chats];
       final seen = pool.map((chat) => chat.id).toSet();
@@ -90,8 +89,6 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     }
     final folder = _selectedFolder(folders);
     if (folder == null) return chats;
-    // A folder that includes the archive shows those chats inline, so the
-    // archive row is not needed while such a folder is selected.
     final pool = folder.includeArchived ? [...chats, ...archived] : chats;
     return pool.where(folder.contains).toList();
   }
@@ -105,8 +102,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     final isFa = locale.languageCode == 'fa';
     final labels = ChatLabels.of(context);
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    // A folder that was deleted elsewhere must not keep the list empty.
     if (_selectedFolderId != null &&
         _selectedFolderId != _personalFolderId &&
         foldersAsync.hasValue &&
@@ -118,23 +115,32 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
+        scrolledUnderElevation: 0.5,
         title: _searching
             ? TextField(
                 key: const ValueKey('chat-list-search-field'),
                 controller: _searchCtrl,
                 autofocus: true,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
                 textInputAction: TextInputAction.search,
                 onChanged: (value) => setState(() => _query = value),
                 decoration: InputDecoration(
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: false,
                   hintText: isFa
                       ? 'جستجو در چت‌ها، گروه‌ها و کانال‌ها...'
                       : 'Search chats, groups and channels...',
+                  hintStyle: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 15,
+                  ),
                 ),
               )
             : Text(
                 isFa ? 'پیام‌رسان' : 'Messenger',
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 22),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 21),
               ),
         actions: [
           IconButton(
@@ -154,28 +160,68 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             onSelected: (v) => _onMenu(v, isFa),
             itemBuilder: (ctx) => [
               PopupMenuItem(
                 value: 'saved',
-                child: Text(isFa ? 'پیام‌های ذخیره‌شده' : 'Saved Messages'),
+                child: Row(
+                  children: [
+                    const Icon(Icons.bookmark_outline_rounded, size: 20),
+                    const SizedBox(width: 12),
+                    Text(isFa ? 'پیام‌های ذخیره‌شده' : 'Saved Messages'),
+                  ],
+                ),
               ),
               PopupMenuItem(
                 value: 'group',
-                child: Text(isFa ? 'گروه جدید' : 'New Group'),
+                child: Row(
+                  children: [
+                    const Icon(Icons.group_outlined, size: 20),
+                    const SizedBox(width: 12),
+                    Text(isFa ? 'گروه جدید' : 'New Group'),
+                  ],
+                ),
               ),
               PopupMenuItem(
                 value: 'channel',
-                child: Text(isFa ? 'کانال جدید' : 'New Channel'),
+                child: Row(
+                  children: [
+                    const Icon(Icons.campaign_outlined, size: 20),
+                    const SizedBox(width: 12),
+                    Text(isFa ? 'کانال جدید' : 'New Channel'),
+                  ],
+                ),
               ),
-              PopupMenuItem(value: 'folder', child: Text(labels.newFolder)),
+              PopupMenuItem(
+                value: 'folder',
+                child: Row(
+                  children: [
+                    const Icon(Icons.create_new_folder_outlined, size: 20),
+                    const SizedBox(width: 12),
+                    Text(labels.newFolder),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'archive',
-                child: Text(labels.archivedChats),
+                child: Row(
+                  children: [
+                    const Icon(Icons.archive_outlined, size: 20),
+                    const SizedBox(width: 12),
+                    Text(labels.archivedChats),
+                  ],
+                ),
               ),
               PopupMenuItem(
                 value: 'support',
-                child: Text(isFa ? 'پشتیبانی' : 'Support'),
+                child: Row(
+                  children: [
+                    const Icon(Icons.support_agent_rounded, size: 20),
+                    const SizedBox(width: 12),
+                    Text(isFa ? 'پشتیبانی' : 'Support'),
+                  ],
+                ),
               ),
             ],
           ),
@@ -183,16 +229,19 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         bottom: _searching
             ? null
             : PreferredSize(
-          preferredSize: const Size.fromHeight(46),
-          child: _FolderBar(
-            folders: folders,
-            selectedId: _selectedFolderId,
-            personalId: _personalFolderId,
-            onSelected: (id) => setState(() => _selectedFolderId = id),
-            onEdit: _openFolderEditor,
-            onCreate: () => _openFolderEditor(null),
-          ),
-        ),
+                preferredSize: const Size.fromHeight(48),
+                child: Container(
+                  color: isDark ? const Color(0xFF17212B) : Colors.white,
+                  child: _FolderBar(
+                    folders: folders,
+                    selectedId: _selectedFolderId,
+                    personalId: _personalFolderId,
+                    onSelected: (id) => setState(() => _selectedFolderId = id),
+                    onEdit: _openFolderEditor,
+                    onCreate: () => _openFolderEditor(null),
+                  ),
+                ),
+              ),
       ),
       body: SafeArea(
         child: chatsAsync.when(
@@ -208,7 +257,6 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               folders,
               archived: archived,
             );
-            // The archive row lives on top of the "All" folder, like Telegram.
             final showArchiveRow =
                 !searching && _selectedFolderId == null && data.hasArchive;
             if (chats.isEmpty && !showArchiveRow) {
@@ -227,14 +275,15 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                   const _SponsoredStrip(),
                 Expanded(
                   child: RefreshIndicator(
+                    color: theme.colorScheme.primary,
                     onRefresh: () => ref.read(chatListProvider.notifier).refresh(),
                     child: ListView.separated(
                       physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: itemCount,
                       separatorBuilder: (_, __) => Divider(
                         height: 1,
-                        indent: 76,
-                        color: Colors.grey.withValues(alpha: 0.15),
+                        indent: 78,
+                        color: theme.dividerColor.withValues(alpha: 0.35),
                       ),
                       itemBuilder: (context, index) {
                         if (showArchiveRow && index == 0) {
@@ -254,8 +303,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                                   showChatContextMenu(context, ref, chat),
                             )
                             .animate()
-                            .fadeIn(duration: 280.ms, delay: (20 * (index % 12)).ms)
-                            .slideX(begin: 0.05, curve: Curves.easeOut);
+                            .fadeIn(duration: 260.ms, delay: (18 * (index % 12)).ms)
+                            .slideY(begin: 0.04, curve: Curves.easeOut);
                       },
                     ),
                   ),
@@ -263,27 +312,36 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               ],
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => _ChatListShimmer(isDark: isDark),
           error: (e, _) => Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.error_outline_rounded, color: Colors.red, size: 40),
+                ),
+                const SizedBox(height: 16),
                 Text(
                   isFa ? 'خطا در بارگذاری' : 'Failed to load',
-                  style: const TextStyle(color: Colors.red),
+                  style: const TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 12),
-                ElevatedButton(
+                const SizedBox(height: 14),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
                   onPressed: () =>
                       ref.read(chatListProvider.notifier).refresh(),
-                  child: Text(isFa ? 'تلاش مجدد' : 'Retry'),
+                  label: Text(isFa ? 'تلاش مجدد' : 'Retry'),
                 ),
               ],
             ),
           ),
         ),
       ),
-      // بدون FloatingActionButton مداد
     );
   }
 
@@ -379,9 +437,6 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               controller: titleCtrl,
               decoration: InputDecoration(
                 labelText: isFa ? 'نام گروه' : 'Group name',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
             ),
           ],
@@ -435,6 +490,77 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   }
 }
 
+/// Shimmer skeleton loading state for Telegram-like fluid perception
+class _ChatListShimmer extends StatelessWidget {
+  final bool isDark;
+  const _ChatListShimmer({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final base = isDark ? const Color(0xFF1E2C3A) : const Color(0xFFE2E8F0);
+    final highlight = isDark ? const Color(0xFF27384A) : const Color(0xFFF1F5F9);
+
+    return Shimmer.fromColors(
+      baseColor: base,
+      highlightColor: highlight,
+      child: ListView.separated(
+        itemCount: 8,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (_, __) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          child: Row(
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 140,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Container(
+                width: 36,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Horizontal folder strip: All | Personal | custom folders | +
 class _FolderBar extends StatelessWidget {
   const _FolderBar({
@@ -456,11 +582,20 @@ class _FolderBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = ChatLabels.of(context);
-    return SizedBox(
-      height: 46,
+    final theme = Theme.of(context);
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: theme.dividerColor.withValues(alpha: 0.35),
+            width: 0.8,
+          ),
+        ),
+      ),
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         children: [
           _chip(context, labels.folderAll, null),
           _chip(context, labels.folderPersonal, personalId),
@@ -489,14 +624,38 @@ class _FolderBar extends StatelessWidget {
     ChatFolderModel? folder,
   }) {
     final selected = selectedId == id;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primary = theme.colorScheme.primary;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
       child: GestureDetector(
         onLongPress: folder == null ? null : () => onEdit(folder),
         child: ChoiceChip(
-          label: Text(label),
+          label: Text(
+            label,
+            style: TextStyle(
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected
+                  ? (isDark ? const Color(0xFF64B5F6) : primary)
+                  : theme.textTheme.bodyMedium?.color,
+            ),
+          ),
           selected: selected,
           onSelected: (_) => onSelected(id),
+          selectedColor: isDark
+              ? primary.withValues(alpha: 0.22)
+              : primary.withValues(alpha: 0.12),
+          side: BorderSide(
+            color: selected
+                ? primary.withValues(alpha: 0.6)
+                : theme.dividerColor.withValues(alpha: 0.35),
+            width: selected ? 1.2 : 0.8,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
       ),
     );
@@ -520,17 +679,29 @@ class _ArchiveRow extends StatelessWidget {
     return ListTile(
       key: const ValueKey('archive-row'),
       onTap: onTap,
-      leading: CircleAvatar(
-        radius: 24,
-        backgroundColor: Colors.blueGrey.withValues(alpha: 0.2),
+      leading: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [
+              Colors.blueGrey.shade400,
+              Colors.blueGrey.shade600,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
         child: Icon(
-          state.hasArchivePin ? Icons.lock_outline : Icons.archive_outlined,
-          color: Colors.blueGrey,
+          state.hasArchivePin ? Icons.lock_outline_rounded : Icons.archive_outlined,
+          color: Colors.white,
+          size: 24,
         ),
       ),
       title: Text(
         labels.archivedChats,
-        style: const TextStyle(fontWeight: FontWeight.w600),
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
       ),
       subtitle: Text('${state.archivedTotal}'),
       trailing: state.archivedUnread > 0
@@ -554,15 +725,6 @@ class _ArchiveRow extends StatelessWidget {
   }
 }
 
-
-/// Point 3: account-security banner.
-///
-/// The old version fetched `/devices/notifications` exactly once when the
-/// widget mounted, so an alert raised while the user sat on the chat list only
-/// appeared after a full app restart — that was the "arrives very late"
-/// complaint. It now polls the dedicated `/security/alerts` feed, shows the
-/// newest undismissed alert immediately, and dismissing it tells the server so
-/// the alert does not come back on another device.
 class _SecurityAlertBanner extends ConsumerStatefulWidget {
   const _SecurityAlertBanner();
 
@@ -604,9 +766,7 @@ class _SecurityAlertBannerState extends ConsumerState<_SecurityAlertBanner> {
             ? null
             : Map<String, dynamic>.from(alerts.first as Map);
       });
-    } catch (_) {
-      // Offline or a transient error: keep whatever is already on screen.
-    }
+    } catch (_) {}
   }
 
   Future<void> _dismiss() async {
@@ -620,7 +780,6 @@ class _SecurityAlertBannerState extends ConsumerState<_SecurityAlertBanner> {
       final api = ref.read(authenticatedSessionProvider).api;
       await api.post('/security/alerts/${alert['id']}/dismiss', {});
     } catch (_) {
-      // The banner is already hidden locally; the next poll re-syncs.
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -647,25 +806,32 @@ class _SecurityAlertBannerState extends ConsumerState<_SecurityAlertBanner> {
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: accent.withValues(alpha: 0.35)),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           onTap: _openDevices,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+            padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  critical ? Icons.gpp_maybe : Icons.security,
-                  color: accent,
-                  size: 24,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    critical ? Icons.gpp_maybe : Icons.security,
+                    color: accent,
+                    size: 22,
+                  ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -675,7 +841,7 @@ class _SecurityAlertBannerState extends ConsumerState<_SecurityAlertBanner> {
                             ? title!
                             : 'رویداد امنیتی در حساب شما',
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.w700,
                           color: accent.shade900,
                         ),
@@ -683,20 +849,20 @@ class _SecurityAlertBannerState extends ConsumerState<_SecurityAlertBanner> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (body?.isNotEmpty == true) ...[
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
                         Text(
                           body!,
                           style: const TextStyle(
-                              fontSize: 11.5, color: Colors.black87),
+                              fontSize: 12, color: Colors.black87),
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       Text(
                         'برای مدیریت دستگاه‌ها ضربه بزنید',
                         style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 11.5,
                             fontWeight: FontWeight.w600,
                             color: accent.shade700),
                       ),
@@ -705,7 +871,7 @@ class _SecurityAlertBannerState extends ConsumerState<_SecurityAlertBanner> {
                 ),
                 IconButton(
                   tooltip: 'بستن',
-                  icon: const Icon(Icons.close, size: 18),
+                  icon: const Icon(Icons.close_rounded, size: 18),
                   onPressed: _busy ? null : _dismiss,
                 ),
               ],
@@ -717,7 +883,6 @@ class _SecurityAlertBannerState extends ConsumerState<_SecurityAlertBanner> {
   }
 }
 
-/// Sponsored channels strip (visible to everyone, set by the general admin).
 class _SponsoredStrip extends StatefulWidget {
   const _SponsoredStrip();
   @override
@@ -763,38 +928,55 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = ChatLabels.of(context);
+    final theme = Theme.of(context);
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            searching
-                ? Icons.search_off_rounded
-                : inFolder
-                    ? Icons.folder_open_rounded
-                    : Icons.chat_bubble_outline_rounded,
-            size: 72,
-            color: Colors.grey[400],
+          Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              searching
+                  ? Icons.search_off_rounded
+                  : inFolder
+                      ? Icons.folder_open_rounded
+                      : Icons.chat_bubble_outline_rounded,
+              size: 56,
+              color: theme.colorScheme.primary,
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           Text(
             searching
                 ? (isFa ? 'چتی پیدا نشد' : 'No chats found')
                 : inFolder
                     ? labels.folderEmpty
                     : (isFa ? 'هنوز گفتگویی ندارید' : 'No conversations yet'),
-            style: TextStyle(color: Colors.grey[600], fontSize: 16),
+            style: TextStyle(
+              color: theme.textTheme.titleLarge?.color,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            searching
-                ? (isFa
-                      ? 'جستجوی سراسری را برای یافتن کاربر یا کانال جدید امتحان کنید'
-                      : 'Try global search to find new users or channels')
-                : isFa
-                    ? 'از تب جستجو کاربر پیدا کنید'
-                    : 'Find users from the Search tab',
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              searching
+                  ? (isFa
+                        ? 'جستجوی سراسری را برای یافتن کاربر یا کانال جدید امتحان کنید'
+                        : 'Try global search to find new users or channels')
+                  : isFa
+                      ? 'از تب جستجو کاربر پیدا کنید'
+                      : 'Find users from the Search tab',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: theme.textTheme.bodySmall?.color, fontSize: 13),
+            ),
           ),
         ],
       ),

@@ -28,430 +28,638 @@ import '../../widgets/chat/chat_labels.dart';
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
+  Widget _settingsGroup(BuildContext context, {String? title, required List<Widget> children}) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (title != null)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 22, top: 16, bottom: 6),
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF17212B) : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isDark ? const Color(0xFF27384A) : const Color(0xFFE2E8F0),
+              width: 0.8,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Column(children: children),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _iconBadge(IconData icon, Color color) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(icon, color: color, size: 20),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isFa = ref.watch(localeProvider).languageCode == 'fa';
     final themeMode = ref.watch(themeModeProvider);
+    final palette = ref.watch(themePaletteProvider);
     final user = ref.watch(authNotifierProvider).valueOrNull;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text(isFa ? 'تنظیمات' : 'Settings')),
+      appBar: AppBar(
+        title: Text(isFa ? 'تنظیمات' : 'Settings', style: const TextStyle(fontWeight: FontWeight.w700)),
+      ),
       body: SafeArea(
         child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
-            const _NotificationTile(),
-            ListTile(
-              leading: const Icon(Icons.sync_outlined),
-              title: const Text('اتصال پس‌زمینه'),
-              subtitle: const Text(
-                'دریافت پیام وقتی برنامه بسته است (مثل تلگرام)',
-                style: TextStyle(fontSize: 12),
-              ),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const BackgroundConnectionScreen(),
-                ),
-              ),
-            ),
+            // User Profile Header Card
             if (user != null)
-              ListTile(
-                // The avatar URL from the API is relative (`/api/v1/media/..`),
-                // so a bare NetworkImage silently failed to resolve and the
-                // user never saw their own photo here. ChatAvatar resolves the
-                // URL, attaches the bearer token only for our own origin and
-                // falls back to the initial when the image cannot load.
-                leading: ChatAvatar(
-                  title: user.displayName,
-                  url: user.avatarUrl,
-                  token: StorageService.getToken(),
-                  radius: 28,
-                ),
-                title: Text(
-                  user.displayName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(user.handle),
-                trailing: const Icon(Icons.chevron_left),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                  );
-                },
-              ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.palette_outlined),
-              title: Text(isFa ? 'تم' : 'Theme'),
-              subtitle: Text(
-                themeMode == ThemeMode.dark
-                    ? (isFa ? 'تاریک' : 'Dark')
-                    : themeMode == ThemeMode.light
-                    ? (isFa ? 'روشن' : 'Light')
-                    : (isFa ? 'سیستم' : 'System'),
-              ),
-              onTap: () {
-                showModalBottomSheet(
-                  context: context,
-                  builder: (_) => SafeArea(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ListTile(
-                          title: Text(isFa ? 'روشن' : 'Light'),
-                          onTap: () {
-                            ref
-                                .read(themeModeProvider.notifier)
-                                .setThemeMode(ThemeMode.light);
-                            Navigator.pop(context);
-                          },
-                        ),
-                        ListTile(
-                          title: Text(isFa ? 'تاریک' : 'Dark'),
-                          onTap: () {
-                            ref
-                                .read(themeModeProvider.notifier)
-                                .setThemeMode(ThemeMode.dark);
-                            Navigator.pop(context);
-                          },
-                        ),
-                        ListTile(
-                          title: Text(isFa ? 'سیستم' : 'System'),
-                          onTap: () {
-                            ref
-                                .read(themeModeProvider.notifier)
-                                .setThemeMode(ThemeMode.system);
-                            Navigator.pop(context);
-                          },
-                        ),
-                      ],
-                    ),
+              Container(
+                margin: const EdgeInsets.fromLTRB(14, 4, 14, 10),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      theme.colorScheme.primary.withValues(alpha: 0.12),
+                      theme.cardColor,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.language),
-              title: Text(isFa ? 'زبان' : 'Language'),
-              subtitle: Text(isFa ? 'فارسی' : 'English'),
-              onTap: () async {
-                final choice = await showDialog<String>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: Text(isFa ? 'انتخاب زبان' : 'Choose language'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ListTile(
-                          title: const Text('فارسی'),
-                          leading: Radio<String>(
-                            value: 'fa',
-                            groupValue: isFa ? 'fa' : 'en',
-                            onChanged: (v) => Navigator.pop(ctx, v),
-                          ),
-                          onTap: () => Navigator.pop(ctx, 'fa'),
-                        ),
-                        ListTile(
-                          title: const Text('English'),
-                          leading: Radio<String>(
-                            value: 'en',
-                            groupValue: isFa ? 'fa' : 'en',
-                            onChanged: (v) => Navigator.pop(ctx, v),
-                          ),
-                          onTap: () => Navigator.pop(ctx, 'en'),
-                        ),
-                      ],
-                    ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                    width: 1,
                   ),
-                );
-                if (choice == 'fa') {
-                  ref
-                      .read(localeProvider.notifier)
-                      .setLocale(const Locale('fa', 'IR'));
-                } else if (choice == 'en') {
-                  ref
-                      .read(localeProvider.notifier)
-                      .setLocale(const Locale('en', 'US'));
-                }
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.visibility_off_outlined),
-              title: Text(isFa ? 'حالت گوست' : 'Ghost Mode'),
-              subtitle: Text(
-                isFa
-                    ? 'پنهان کردن وضعیت آنلاین و آخرین بازدید'
-                    : 'Hide online status & last seen',
-              ),
-              trailing: Switch(
-                value: !(user?.showLastSeen ?? true),
-                onChanged: (v) async {
-                  try {
-                    await ApiService().put('/users/me', {'show_last_seen': !v});
-                    ref.read(authNotifierProvider.notifier).checkSession();
-                  } catch (_) {}
-                },
-              ),
-            ),
-            const JoinPrivacyTile(),
-            ListTile(
-              key: const ValueKey('two-factor-security-tile'),
-              leading: const Icon(Icons.security_outlined),
-              title: Text(isFa ? 'تأیید دو مرحله‌ای' : 'Two-Step Verification'),
-              subtitle: Text(
-                user?.isTwoFactorEnabled == true
-                    ? (isFa ? 'Google Authenticator فعال است' : 'Google Authenticator is enabled')
-                    : (isFa ? 'اختیاری — ورود اصلی با پیامک است' : 'Optional — SMS remains the primary sign-in'),
-              ),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const TwoFactorSecurityScreen()),
-              ),
-            ),
-            ListTile(
-              key: const ValueKey('archive-lock-tile'),
-              leading: const Icon(Icons.lock_outline),
-              title: Text(ChatLabels.of(context).archiveLock),
-              subtitle: Text(ChatLabels.of(context).archiveLockHint),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ArchiveLockScreen()),
-              ),
-            ),
-            ListTile(
-              key: const ValueKey('archived-chats-tile'),
-              leading: const Icon(Icons.archive_outlined),
-              title: Text(ChatLabels.of(context).archivedChats),
-              onTap: () => openArchivedChats(context, ref),
-            ),
-            ListTile(
-              key: const ValueKey('offline-media-tile'),
-              leading: const Icon(Icons.download_done_outlined, color: Colors.green),
-              title: Text(isFa ? 'حافظه آفلاین رسانه' : 'Offline media storage'),
-              subtitle: Text(
-                isFa
-                    ? 'نگه‌داری عکس‌ها و فایل‌های ارسالی روی همین دستگاه (پشتیبان در برابر از دست رفتن اطلاعات سرور)'
-                    : 'Keeps sent media on this device as a safeguard against server data loss',
-                style: const TextStyle(fontSize: 12),
-              ),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const OfflineMediaScreen()),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.devices_outlined),
-              title: Text(isFa ? 'دستگاه‌ها و نشست‌ها' : 'Devices & Sessions'),
-              subtitle: Text(isFa ? 'مدیریت ورود چنددستگاهی مانند تلگرام' : 'Manage multi-device logins like Telegram'),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DeviceManagementScreen())),
-            ),
-            ListTile(
-              leading: const Icon(Icons.report_outlined, color: Colors.orange),
-              title: Text(isFa ? 'گزارش‌ها (مدیریت)' : 'Reports (Admin)'),
-              subtitle: Text(isFa ? 'بررسی گزارش کاربران و گروه‌ها/کانال‌ها' : 'Review user & chat reports'),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminReportsScreen())),
-            ),
-            if (user?.isAdmin == true)
-              ListTile(
-                leading: const Icon(Icons.campaign_outlined, color: Colors.amber),
-                title: const Text('کانال‌های اسپانسرشده'),
-                subtitle: const Text('مدیریت کانال‌های تبلیغاتی (مدیر کل)', style: TextStyle(fontSize: 12)),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SponsoredChannelsScreen()),
                 ),
-              ),
-            ListTile(
-              leading: const Icon(Icons.forward_outlined),
-              title: Text(isFa ? 'اجازه فوروارد پیام‌های من' : 'Allow forwarding my messages'),
-              subtitle: Text(isFa ? 'دیگران بتوانند پیام‌های شما را فوروارد کنند' : 'Others can forward your messages'),
-              trailing: Switch(
-                value: user?.allowForwarding ?? true,
-                onChanged: (v) async {
-                  try {
-                    await ApiService().put('/users/me', {'allow_forwarding': v});
-                    ref.read(authNotifierProvider.notifier).checkSession();
-                  } catch (_) {}
-                },
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.rule_outlined),
-              title: Text(isFa ? 'قوانین و مقررات' : 'Rules & Terms'),
-              subtitle: Text(isFa ? 'قوانین استفاده از پیام‌رسان' : 'Messenger rules of use'),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const TermsScreen()),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_outlined),
-              title: Text(isFa ? 'نمایش عکس پروفایل' : 'Show Profile Photo'),
-              trailing: Switch(
-                value: user?.showProfilePhoto ?? true,
-                onChanged: (v) async {
-                  try {
-                    await ApiService().put('/users/me', {
-                      'show_profile_photo': v,
-                    });
-                    ref.read(authNotifierProvider.notifier).checkSession();
-                  } catch (_) {}
-                },
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.block_outlined),
-              title: Text(isFa ? 'افراد بلاک شده' : 'Blocked Users'),
-              onTap: () async {
-                try {
-                  final res = await ApiService().get('/users/blocked');
-                  final users = res['users'] as List? ?? [];
-                  if (!context.mounted) return;
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: Text(isFa ? 'بلاک شده‌ها' : 'Blocked Users'),
-                      content: SizedBox(
-                        width: double.maxFinite,
-                        child: users.isEmpty
-                            ? Text(isFa ? 'کسی بلاک نشده' : 'No blocked users')
-                            : ListView.builder(
-                                shrinkWrap: true,
-                                itemCount: users.length,
-                                itemBuilder: (_, i) {
-                                  final u = users[i];
-                                  return ListTile(
-                                    title: Text(u['display_name'] ?? ''),
-                                    subtitle: Text('@${u['username'] ?? ''}'),
-                                    trailing: TextButton(
-                                      child: const Text(
-                                        'آنبلاک',
-                                        style: TextStyle(color: Colors.red),
-                                      ),
-                                      onPressed: () async {
-                                        await ApiService().post(
-                                          '/users/unblock/${u['id']}',
-                                          {},
-                                        );
-                                        Navigator.pop(ctx);
-                                      },
-                                    ),
-                                  );
-                                },
+                child: Row(
+                  children: [
+                    ChatAvatar(
+                      title: user.displayName,
+                      url: user.avatarUrl,
+                      token: StorageService.getToken(),
+                      radius: 32,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.displayName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 17.5,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            user.handle,
+                            style: TextStyle(
+                              color: theme.textTheme.bodySmall?.color,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (user.mobileNumber != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              user.mobileNumber!,
+                              textDirection: TextDirection.ltr,
+                              style: TextStyle(
+                                color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.8),
+                                fontSize: 12,
                               ),
+                            ),
+                          ],
+                        ],
                       ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('بستن'),
-                        ),
-                      ],
                     ),
-                  );
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(e.toString())));
-                  }
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.switch_account),
-              title: Text(isFa ? 'مدیریت اکانت‌ها' : 'Accounts'),
-              subtitle: Text(
-                isFa ? 'سوییچ بین حداکثر ۳ اکانت' : 'Switch up to 3 accounts',
-              ),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const AccountSwitcherScreen(),
-                  ),
-                );
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.support_agent),
-              title: Text(isFa ? 'چت با پشتیبانی' : 'Support Chat'),
-              onTap: () async {
-                try {
-                  final res = await ApiService().post('/chats/support', {});
-                  final chatId = res['chat_id'] as String;
-                  if (context.mounted) {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          chatId: chatId,
-                          title: isFa ? 'پشتیبانی' : 'Support',
-                          chatType: 'support',
-                        ),
+                    FilledButton.tonal(
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       ),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(e.toString())));
-                  }
-                }
-              },
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                        );
+                      },
+                      child: Text(isFa ? 'ویرایش' : 'Edit'),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Section: Connection & Sync
+            _settingsGroup(
+              context,
+              title: isFa ? 'ارتباط و اتصال' : 'Connection & Sync',
+              children: [
+                const _NotificationTile(),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  leading: _iconBadge(Icons.sync_rounded, const Color(0xFF00ACC1)),
+                  title: const Text('اتصال پس‌زمینه', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text(
+                    'دریافت پیام وقتی برنامه بسته است (مثل تلگرام)',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const BackgroundConnectionScreen(),
+                    ),
+                  ),
+                ),
+              ],
             ),
 
-            ListTile(
-              leading: const Icon(Icons.bookmark_outline),
-              title: Text(isFa ? 'پیام‌های ذخیره‌شده' : 'Saved Messages'),
-              onTap: () async {
-                try {
-                  final res = await ApiService().post('/chats/saved', {});
-                  final chatId = res['chat_id'] as String;
-                  if (context.mounted) {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          chatId: chatId,
-                          title: isFa ? 'پیام‌های ذخیره‌شده' : 'Saved Messages',
-                          chatType: 'saved',
+            // Section: Appearance
+            _settingsGroup(
+              context,
+              title: isFa ? 'ظاهر و شخصی‌سازی' : 'Appearance & Personalization',
+              children: [
+                ListTile(
+                  leading: _iconBadge(Icons.palette_rounded, const Color(0xFF8B5CF6)),
+                  title: Text(isFa ? 'تم' : 'Theme', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(
+                    themeMode == ThemeMode.dark
+                        ? (isFa ? 'تاریک' : 'Dark')
+                        : themeMode == ThemeMode.light
+                        ? (isFa ? 'روشن' : 'Light')
+                        : (isFa ? 'سیستم' : 'System'),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      builder: (_) => SafeArea(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.wb_sunny_rounded, color: Colors.orange),
+                              title: Text(isFa ? 'روشن' : 'Light'),
+                              trailing: themeMode == ThemeMode.light ? const Icon(Icons.check, color: Colors.blue) : null,
+                              onTap: () {
+                                ref
+                                    .read(themeModeProvider.notifier)
+                                    .setThemeMode(ThemeMode.light);
+                                Navigator.pop(context);
+                              },
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.nightlight_round, color: Colors.indigo),
+                              title: Text(isFa ? 'تاریک' : 'Dark'),
+                              trailing: themeMode == ThemeMode.dark ? const Icon(Icons.check, color: Colors.blue) : null,
+                              onTap: () {
+                                ref
+                                    .read(themeModeProvider.notifier)
+                                    .setThemeMode(ThemeMode.dark);
+                                Navigator.pop(context);
+                              },
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.settings_suggest_rounded, color: Colors.grey),
+                              title: Text(isFa ? 'سیستم' : 'System'),
+                              trailing: themeMode == ThemeMode.system ? const Icon(Icons.check, color: Colors.blue) : null,
+                              onTap: () {
+                                ref
+                                    .read(themeModeProvider.notifier)
+                                    .setThemeMode(ThemeMode.system);
+                                Navigator.pop(context);
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(e.toString())));
-                  }
-                }
-              },
+                  },
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  leading: _iconBadge(Icons.language_rounded, const Color(0xFF10B981)),
+                  title: Text(isFa ? 'زبان' : 'Language', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(isFa ? 'فارسی' : 'English'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () async {
+                    final choice = await showDialog<String>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: Text(isFa ? 'انتخاب زبان' : 'Choose language'),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              title: const Text('فارسی'),
+                              leading: Radio<String>(
+                                value: 'fa',
+                                groupValue: isFa ? 'fa' : 'en',
+                                onChanged: (v) => Navigator.pop(ctx, v),
+                              ),
+                              onTap: () => Navigator.pop(ctx, 'fa'),
+                            ),
+                            ListTile(
+                              title: const Text('English'),
+                              leading: Radio<String>(
+                                value: 'en',
+                                groupValue: isFa ? 'fa' : 'en',
+                                onChanged: (v) => Navigator.pop(ctx, v),
+                              ),
+                              onTap: () => Navigator.pop(ctx, 'en'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                    if (choice == 'fa') {
+                      ref
+                          .read(localeProvider.notifier)
+                          .setLocale(const Locale('fa', 'IR'));
+                    } else if (choice == 'en') {
+                      ref
+                          .read(localeProvider.notifier)
+                          .setLocale(const Locale('en', 'US'));
+                    }
+                  },
+                ),
+              ],
             ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: Text(
-                isFa ? 'خروج از حساب' : 'Logout',
-                style: const TextStyle(color: Colors.red),
-              ),
-              onTap: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: Text(isFa ? 'خروج' : 'Logout'),
-                    content: Text(isFa ? 'آیا مطمئن هستید؟' : 'Are you sure?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: Text(isFa ? 'خیر' : 'No'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: Text(isFa ? 'بله' : 'Yes'),
-                      ),
-                    ],
+
+            // Section: Privacy & Security
+            _settingsGroup(
+              context,
+              title: isFa ? 'امنیت و حریم خصوصی' : 'Privacy & Security',
+              children: [
+                ListTile(
+                  leading: _iconBadge(Icons.visibility_off_rounded, const Color(0xFF64748B)),
+                  title: Text(isFa ? 'حالت گوست' : 'Ghost Mode', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(
+                    isFa
+                        ? 'پنهان کردن وضعیت آنلاین و آخرین بازدید'
+                        : 'Hide online status & last seen',
                   ),
-                );
-                if (confirm == true) {
-                  await ref.read(authNotifierProvider.notifier).logout();
-                }
-              },
+                  trailing: Switch(
+                    value: !(user?.showLastSeen ?? true),
+                    onChanged: (v) async {
+                      try {
+                        await ApiService().put('/users/me', {'show_last_seen': !v});
+                        ref.read(authNotifierProvider.notifier).checkSession();
+                      } catch (_) {}
+                    },
+                  ),
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                const JoinPrivacyTile(),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  key: const ValueKey('two-factor-security-tile'),
+                  leading: _iconBadge(Icons.security_rounded, const Color(0xFF2563EB)),
+                  title: Text(isFa ? 'تأیید دو مرحله‌ای' : 'Two-Step Verification', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(
+                    user?.isTwoFactorEnabled == true
+                        ? (isFa ? 'Google Authenticator فعال است' : 'Google Authenticator is enabled')
+                        : (isFa ? 'اختیاری — ورود اصلی با پیامک است' : 'Optional — SMS remains the primary sign-in'),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const TwoFactorSecurityScreen()),
+                  ),
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  key: const ValueKey('archive-lock-tile'),
+                  leading: _iconBadge(Icons.lock_rounded, const Color(0xFFF59E0B)),
+                  title: Text(ChatLabels.of(context).archiveLock, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(ChatLabels.of(context).archiveLockHint),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ArchiveLockScreen()),
+                  ),
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  key: const ValueKey('archived-chats-tile'),
+                  leading: _iconBadge(Icons.archive_rounded, const Color(0xFF6B7280)),
+                  title: Text(ChatLabels.of(context).archivedChats, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => openArchivedChats(context, ref),
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  leading: _iconBadge(Icons.devices_rounded, const Color(0xFF3B82F6)),
+                  title: Text(isFa ? 'دستگاه‌ها و نشست‌ها' : 'Devices & Sessions', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(isFa ? 'مدیریت ورود چنددستگاهی مانند تلگرام' : 'Manage multi-device logins like Telegram'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DeviceManagementScreen())),
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  leading: _iconBadge(Icons.forward_rounded, const Color(0xFF14B8A6)),
+                  title: Text(isFa ? 'اجازه فوروارد پیام‌های من' : 'Allow forwarding my messages', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(isFa ? 'دیگران بتوانند پیام‌های شما را فوروارد کنند' : 'Others can forward your messages'),
+                  trailing: Switch(
+                    value: user?.allowForwarding ?? true,
+                    onChanged: (v) async {
+                      try {
+                        await ApiService().put('/users/me', {'allow_forwarding': v});
+                        ref.read(authNotifierProvider.notifier).checkSession();
+                      } catch (_) {}
+                    },
+                  ),
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  leading: _iconBadge(Icons.photo_rounded, const Color(0xFFA855F7)),
+                  title: Text(isFa ? 'نمایش عکس پروفایل' : 'Show Profile Photo', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  trailing: Switch(
+                    value: user?.showProfilePhoto ?? true,
+                    onChanged: (v) async {
+                      try {
+                        await ApiService().put('/users/me', {
+                          'show_profile_photo': v,
+                        });
+                        ref.read(authNotifierProvider.notifier).checkSession();
+                      } catch (_) {}
+                    },
+                  ),
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  leading: _iconBadge(Icons.block_rounded, const Color(0xFFEF4444)),
+                  title: Text(isFa ? 'افراد بلاک شده' : 'Blocked Users', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () async {
+                    try {
+                      final res = await ApiService().get('/users/blocked');
+                      final users = res['users'] as List? ?? [];
+                      if (!context.mounted) return;
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: Text(isFa ? 'بلاک شده‌ها' : 'Blocked Users'),
+                          content: SizedBox(
+                            width: double.maxFinite,
+                            child: users.isEmpty
+                                ? Text(isFa ? 'کسی بلاک نشده' : 'No blocked users')
+                                : ListView.builder(
+                                    shrinkWrap: true,
+                                    itemCount: users.length,
+                                    itemBuilder: (_, i) {
+                                      final u = users[i];
+                                      return ListTile(
+                                        title: Text(u['display_name'] ?? ''),
+                                        subtitle: Text('@${u['username'] ?? ''}'),
+                                        trailing: TextButton(
+                                          child: const Text(
+                                            'آنبلاک',
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                          onPressed: () async {
+                                            await ApiService().post(
+                                              '/users/unblock/${u['id']}',
+                                              {},
+                                            );
+                                            Navigator.pop(ctx);
+                                          },
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('بستن'),
+                            ),
+                          ],
+                        ),
+                      );
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(e.toString())));
+                      }
+                    }
+                  },
+                ),
+              ],
             ),
+
+            // Section: Data & Storage
+            _settingsGroup(
+              context,
+              title: isFa ? 'داده‌ها و ذخیره‌سازی' : 'Data & Storage',
+              children: [
+                ListTile(
+                  key: const ValueKey('offline-media-tile'),
+                  leading: _iconBadge(Icons.download_done_rounded, const Color(0xFF10B981)),
+                  title: Text(isFa ? 'حافظه آفلاین رسانه' : 'Offline media storage', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(
+                    isFa
+                        ? 'نگه‌داری عکس‌ها و فایل‌های ارسالی روی همین دستگاه (پشتیبان در برابر از دست رفتن اطلاعات سرور)'
+                        : 'Keeps sent media on this device as a safeguard against server data loss',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const OfflineMediaScreen()),
+                  ),
+                ),
+              ],
+            ),
+
+            // Section: Account & Management
+            _settingsGroup(
+              context,
+              title: isFa ? 'حساب کاربری و مدیریت' : 'Account & Management',
+              children: [
+                ListTile(
+                  leading: _iconBadge(Icons.switch_account_rounded, const Color(0xFF2563EB)),
+                  title: Text(isFa ? 'مدیریت اکانت‌ها' : 'Accounts', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(
+                    isFa ? 'سوییچ بین حداکثر ۳ اکانت' : 'Switch up to 3 accounts',
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AccountSwitcherScreen(),
+                      ),
+                    );
+                  },
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  leading: _iconBadge(Icons.report_problem_rounded, const Color(0xFFF97316)),
+                  title: Text(isFa ? 'گزارش‌ها (مدیریت)' : 'Reports (Admin)', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(isFa ? 'بررسی گزارش کاربران و گروه‌ها/کانال‌ها' : 'Review user & chat reports'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminReportsScreen())),
+                ),
+                if (user?.isAdmin == true) ...[
+                  Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                  ListTile(
+                    leading: _iconBadge(Icons.campaign_rounded, const Color(0xFFEAB308)),
+                    title: const Text('کانال‌های اسپانسرشده', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('مدیریت کانال‌های تبلیغاتی (مدیر کل)', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SponsoredChannelsScreen()),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+
+            // Section: Help & Information
+            _settingsGroup(
+              context,
+              title: isFa ? 'راهنما و اطلاعات' : 'Help & Information',
+              children: [
+                ListTile(
+                  leading: _iconBadge(Icons.support_agent_rounded, const Color(0xFF00ACC1)),
+                  title: Text(isFa ? 'چت با پشتیبانی' : 'Support Chat', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () async {
+                    try {
+                      final res = await ApiService().post('/chats/support', {});
+                      final chatId = res['chat_id'] as String;
+                      if (context.mounted) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              chatId: chatId,
+                              title: isFa ? 'پشتیبانی' : 'Support',
+                              chatType: 'support',
+                            ),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(e.toString())));
+                      }
+                    }
+                  },
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  leading: _iconBadge(Icons.bookmark_rounded, const Color(0xFF3B82F6)),
+                  title: Text(isFa ? 'پیام‌های ذخیره‌شده' : 'Saved Messages', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () async {
+                    try {
+                      final res = await ApiService().post('/chats/saved', {});
+                      final chatId = res['chat_id'] as String;
+                      if (context.mounted) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              chatId: chatId,
+                              title: isFa ? 'پیام‌های ذخیره‌شده' : 'Saved Messages',
+                              chatType: 'saved',
+                            ),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(e.toString())));
+                      }
+                    }
+                  },
+                ),
+                Divider(height: 1, indent: 56, color: theme.dividerColor.withValues(alpha: 0.2)),
+                ListTile(
+                  leading: _iconBadge(Icons.article_rounded, const Color(0xFF64748B)),
+                  title: Text(isFa ? 'قوانین و مقررات' : 'Rules & Terms', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(isFa ? 'قوانین استفاده از پیام‌رسان' : 'Messenger rules of use'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const TermsScreen()),
+                  ),
+                ),
+              ],
+            ),
+
+            // Logout
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.red.withValues(alpha: 0.25)),
+                ),
+                tileColor: Colors.red.withValues(alpha: 0.06),
+                leading: _iconBadge(Icons.logout_rounded, Colors.red),
+                title: Text(
+                  isFa ? 'خروج از حساب' : 'Logout',
+                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700),
+                ),
+                onTap: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Text(isFa ? 'خروج' : 'Logout'),
+                      content: Text(isFa ? 'آیا مطمئن هستید؟' : 'Are you sure?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text(isFa ? 'خیر' : 'No'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: Text(isFa ? 'بله' : 'Yes', style: const TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await ref.read(authNotifierProvider.notifier).logout();
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -492,7 +700,6 @@ class _NotificationTileState extends State<_NotificationTile> {
       await BackgroundPollService.stop();
     }
     await NotificationService().setEnabled(value);
-    // Tell the server too, so future push channels respect the choice.
     try {
       await ApiService().post('/notifications/register', {
         'notifications_enabled': value,
@@ -504,12 +711,22 @@ class _NotificationTileState extends State<_NotificationTile> {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(
-        _enabled
-            ? Icons.notifications_active_outlined
-            : Icons.notifications_off_outlined,
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: const Color(0xFF3B82F6).withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          _enabled
+              ? Icons.notifications_active_rounded
+              : Icons.notifications_off_rounded,
+          color: const Color(0xFF3B82F6),
+          size: 20,
+        ),
       ),
-      title: const Text('اعلان پیام‌های جدید'),
+      title: const Text('اعلان پیام‌های جدید', style: TextStyle(fontWeight: FontWeight.w600)),
       subtitle: const Text(
         'نمایش اعلان حتی وقتی برنامه بسته است (بدون نیاز به گوگل)',
         style: TextStyle(fontSize: 12),

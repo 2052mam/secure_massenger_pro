@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shimmer/shimmer.dart';
 
 import '../../../data/models/search_history_model.dart';
 import '../../../data/models/user_model.dart';
@@ -34,16 +35,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   bool get _hasQuery => _ctrl.text.trim().length >= 2;
 
-  /// Recent searches survive deleting a chat, so a person found once can
-  /// always be reached again — the way Telegram's search tab behaves.
   Future<void> _loadHistory() async {
     try {
       final res = await ApiService().get('/users/search-history');
       if (!mounted) return;
       setState(() => _history = SearchHistoryItem.listFrom(res));
-    } catch (_) {
-      // History is a convenience; searching still works without it.
-    }
+    } catch (_) {}
   }
 
   Future<void> _remember({
@@ -149,11 +146,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       final chatId = ch['id'] as String;
       final title = ch['title'] as String? ?? '';
       final chatType = ch['chat_type'] as String? ?? 'channel';
-      // Chats we already belong to (groups included) open straight away; only
-      // public suggestions we are not a member of need a join request.
       if (ch['is_member'] != true) {
-        // Only open after the server confirms membership; an access error is
-        // not evidence that we were already a member.
         await ApiService().post('/chats/$chatId/add-member', {
           'user_id': (await ApiService().get('/users/me'))['id'],
         });
@@ -211,15 +204,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Widget build(BuildContext context) {
     final isFa = ref.watch(localeProvider).languageCode == 'fa';
     final labels = ChatLabels.of(context);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primary = theme.colorScheme.primary;
     final showHistory = !_hasQuery && _history.isNotEmpty;
 
     return Scaffold(
-      appBar: AppBar(title: Text(isFa ? 'جستجو' : 'Search')),
+      appBar: AppBar(
+        title: Text(isFa ? 'جستجو' : 'Search', style: const TextStyle(fontWeight: FontWeight.w700)),
+      ),
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: TextField(
                 controller: _ctrl,
                 onChanged: (q) {
@@ -233,11 +231,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   hintText: isFa
                       ? 'جستجو کاربر یا کانال...'
                       : 'Search user or channel...',
-                  prefixIcon: const Icon(Icons.search),
+                  prefixIcon: Icon(Icons.search_rounded, color: primary),
                   suffixIcon: _ctrl.text.isEmpty
                       ? null
                       : IconButton(
-                          icon: const Icon(Icons.clear),
+                          icon: const Icon(Icons.clear_rounded),
                           onPressed: () {
                             _ctrl.clear();
                             _search('');
@@ -245,12 +243,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           },
                         ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
               ),
             ),
-            if (_loading) const LinearProgressIndicator(),
+            if (_loading)
+              LinearProgressIndicator(
+                minHeight: 2.5,
+                backgroundColor: primary.withValues(alpha: 0.12),
+                valueColor: AlwaysStoppedAnimation<Color>(primary),
+              ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -258,28 +261,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               ),
             Expanded(
               child: ListView(
+                padding: const EdgeInsets.only(bottom: 16),
                 children: [
                   if (showHistory) ...[
                     Padding(
-                      padding: const EdgeInsets.only(
-                        left: 16,
-                        right: 8,
-                        top: 8,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Row(
                         children: [
                           Expanded(
                             child: Text(
                               labels.recentSearches,
                               style: const TextStyle(
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14.5,
                               ),
                             ),
                           ),
                           TextButton(
                             key: const ValueKey('clear-search-history'),
                             onPressed: _clearHistory,
-                            child: Text(labels.clearAll),
+                            child: Text(labels.clearAll, style: const TextStyle(fontWeight: FontWeight.w600)),
                           ),
                         ],
                       ),
@@ -294,36 +295,42 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     ? item.user!.avatarUrl
                                     : null,
                                 token: StorageService.getToken(),
+                                radius: 22,
                               )
-                            : CircleAvatar(
+                            : Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: primary.withValues(alpha: 0.12),
+                                ),
                                 child: Icon(
                                   item.chat != null
-                                      ? Icons.campaign
-                                      : Icons.history,
+                                      ? Icons.campaign_rounded
+                                      : Icons.history_rounded,
+                                  color: primary,
+                                  size: 22,
                                 ),
                               ),
-                        title: Text(item.title),
+                        title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: item.subtitle == null
                             ? null
                             : Text(item.subtitle!),
                         trailing: IconButton(
-                          icon: const Icon(Icons.close, size: 18),
+                          icon: const Icon(Icons.close_rounded, size: 18),
                           onPressed: () => _removeHistory(item),
                         ),
                         onTap: () => _openHistoryItem(item),
                       ),
                     ),
-                    const Divider(),
+                    Divider(color: theme.dividerColor.withValues(alpha: 0.35), height: 20),
                   ],
                   if (_users.isNotEmpty) ...[
                     Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Text(
                         isFa ? 'کاربران' : 'Users',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                       ),
                     ),
                     ..._users.map(
@@ -332,45 +339,72 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           title: u.displayName,
                           url: u.avatarUrl,
                           token: StorageService.getToken(),
+                          radius: 24,
                         ),
-                        title: Text(u.displayName),
-                        subtitle: Text(u.handle),
-                        trailing: const Icon(Icons.chat_bubble_outline),
+                        title: Text(u.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Text(u.handle, style: TextStyle(color: theme.textTheme.bodySmall?.color)),
+                        trailing: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: primary.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.chat_bubble_outline_rounded, color: primary, size: 18),
+                        ),
                         onTap: () => _startChat(u),
                       ),
                     ),
                   ],
                   if (_channels.isNotEmpty) ...[
                     Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Text(
                         isFa ? 'گروه‌ها و کانال‌ها' : 'Groups & Channels',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                       ),
                     ),
                     ..._channels.map(
                       (ch) => ListTile(
-                        leading: CircleAvatar(
+                        leading: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              colors: ch['chat_type'] == 'group'
+                                  ? [Colors.blueGrey.shade400, Colors.blueGrey.shade700]
+                                  : [primary, const Color(0xFF00ACC1)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
                           child: Icon(
                             ch['chat_type'] == 'group'
-                                ? Icons.group
-                                : Icons.campaign,
+                                ? Icons.groups_rounded
+                                : Icons.campaign_rounded,
+                            color: Colors.white,
+                            size: 24,
                           ),
                         ),
-                        title: Text(ch['title'] ?? ''),
+                        title: Text(ch['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: ch['username'] != null
                             ? Text('@${ch['username']}')
                             : null,
                         trailing: ch['is_member'] == true
-                            ? const Icon(Icons.arrow_forward_ios, size: 16)
-                            : Text(
-                                isFa ? 'عضو شدن' : 'Join',
-                                style: TextStyle(
-                                  color: Theme.of(context).primaryColor,
-                                  fontWeight: FontWeight.w600,
+                            ? const Icon(Icons.arrow_forward_ios_rounded, size: 16)
+                            : Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: primary,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Text(
+                                  isFa ? 'عضو شدن' : 'Join',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12.5,
+                                  ),
                                 ),
                               ),
                         onTap: () => _joinChannel(ch),
@@ -383,12 +417,30 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       !showHistory)
                     Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Text(
-                          isFa
-                              ? 'حداقل ۲ کاراکتر وارد کنید'
-                              : 'Enter at least 2 characters',
-                          style: TextStyle(color: Colors.grey[600]),
+                        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: primary.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.search_rounded, size: 48, color: primary),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              isFa
+                                  ? 'حداقل ۲ کاراکتر وارد کنید'
+                                  : 'Enter at least 2 characters',
+                              style: TextStyle(
+                                color: theme.textTheme.bodyMedium?.color,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

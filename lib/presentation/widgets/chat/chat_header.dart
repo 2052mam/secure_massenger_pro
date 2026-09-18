@@ -37,6 +37,7 @@ class ChatHeader extends StatelessWidget {
         : avatarUrl;
     final online =
         isPrivate && peer?.isOnline == true && peer?.showLastSeen == true;
+
     final String subtitle;
     if (isPrivate && peer != null) {
       subtitle = online
@@ -48,7 +49,6 @@ class ChatHeader extends StatelessWidget {
       if (membersCount == null) {
         subtitle = (chatType == 'channel' ? labels.channel : labels.group);
       } else {
-        // Telegram-like: show online count if available
         final base = labels.members(membersCount!, subscribers: chatType == 'channel');
         if (onlineCount != null && onlineCount! > 0 && chatType == 'group') {
           subtitle = '$base، $onlineCount آنلاین';
@@ -63,52 +63,96 @@ class ChatHeader extends StatelessWidget {
     } else {
       subtitle = labels.profile;
     }
+
     final color =
         Theme.of(context).appBarTheme.foregroundColor ??
         Theme.of(context).colorScheme.onSurface;
+
     return Semantics(
       button: onTap != null,
       child: InkWell(
         key: const ValueKey('chat-header'),
         onTap: onTap,
-        child: Row(
-          children: [
-            ChatAvatar(
-              title: name,
-              url: photo,
-              token: token,
-              foreground: color,
-              fallbackIcon: chatType == 'saved' ? Icons.bookmark : null,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(
+            children: [
+              Stack(
                 children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  ChatAvatar(
+                    title: name,
+                    url: photo,
+                    token: token,
+                    foreground: color,
+                    radius: 20,
+                    fallbackIcon: chatType == 'saved' ? Icons.bookmark_rounded : null,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: color.withValues(alpha: online ? 1 : 0.8),
+                  if (online)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Theme.of(context).appBarTheme.backgroundColor ??
+                                Theme.of(context).scaffoldBackgroundColor,
+                            width: 2,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        if (chatType == 'saved')
+                          const Padding(
+                            padding: EdgeInsets.only(right: 4),
+                            child: Icon(Icons.bookmark_rounded, size: 14, color: Colors.white70),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 1.5),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: online ? FontWeight.w600 : FontWeight.w400,
+                        color: online
+                            ? const Color(0xFF69F0AE)
+                            : color.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

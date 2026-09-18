@@ -51,6 +51,7 @@ import 'secure_chat_screen.dart';
 import 'photo_editor_screen.dart';
 import 'video_editor_screen.dart';
 import '../../widgets/chat/reply_preview.dart';
+import '../../widgets/chat/chat_upload_indicator.dart';
 import '../../widgets/media/media_labels.dart';
 import '../media/photo_viewer_screen.dart';
 import '../media/view_once_photo_screen.dart';
@@ -110,6 +111,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   int _loadGeneration = 0;
   bool _loading = true;
   bool _sending = false;
+  String? _uploadingType;
+  String? _uploadingName;
   bool _searchMode = false;
   String? _error;
   Timer? _pollTimer;
@@ -963,7 +966,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final reply = _replyTo;
 
     bool sendSpoiler = _isSpoiler;
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _uploadingType = 'file';
+      _uploadingName = fileName;
+    });
     try {
       final upload = await _uploadAndCache(file, fileName: fileName);
       final mediaId = upload['id'] as String;
@@ -1146,7 +1153,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
 
     final reply = _replyTo;
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _uploadingType = isVideo ? 'video' : 'image';
+      _uploadingName = null;
+    });
     try {
       final upload = await _uploadAndCache(sendFile, fields: trimFields);
       final mediaId = upload['id'] as String;
@@ -1209,7 +1220,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         return;
       }
       final reply = _replyTo;
-      setState(() => _sending = true);
+      setState(() {
+        _sending = true;
+        _uploadingType = 'voice';
+        _uploadingName = null;
+      });
       try {
         final upload = await _uploadAndCache(file);
         final mediaId = upload['id'] as String;
@@ -1505,7 +1520,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     if (video == null || !mounted) return;
     final file = File(video.path);
     final reply = _replyTo;
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _uploadingType = 'video_note';
+      _uploadingName = null;
+    });
     try {
       final upload = await _uploadAndCache(file);
       final mediaId = upload['id'] as String;
@@ -1874,7 +1893,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       title = parts.sublist(1).join(' - ').trim();
     }
     final reply = _replyTo;
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _uploadingType = 'audio';
+      _uploadingName = name;
+    });
     try {
       final upload = await _uploadAndCache(file);
       final mediaId = upload['id'] as String;
@@ -2254,149 +2277,194 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 12, bottom: 8),
-                    decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+        builder: (context, setSheetState) {
+          final theme = Theme.of(context);
+          final isDark = theme.brightness == Brightness.dark;
+
+          Widget attachBadge(IconData icon, List<Color> colors) {
+            return Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: colors,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.first.withValues(alpha: 0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
-                  if (_can('send_photos'))
-                    ListTile(
-                      leading: const Icon(Icons.photo_library),
-                      title: const Text('عکس از گالری'),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickAndSendMedia(ImageSource.gallery);
-                      },
-                    ),
-                  if (_can('send_photos'))
-                    ListTile(
-                      leading: const Icon(Icons.camera_alt),
-                      title: const Text('دوربین'),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickAndSendMedia(ImageSource.camera);
-                      },
-                    ),
-                  if (_can('send_videos'))
-                    ListTile(
-                      leading: const Icon(Icons.videocam),
-                      title: const Text('ویدیو'),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickAndSendMedia(ImageSource.gallery, isVideo: true);
-                      },
-                    ),
-                  if (_can('send_files'))
-                    ListTile(
-                      leading: const Icon(Icons.insert_drive_file),
-                      title: const Text('ارسال فایل (اسناد، PDF، ZIP، PNG، TXT، ...)'),
-                      subtitle: const Text('همه فرمت‌ها مانند تلگرام پشتیبانی می‌شوند', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickAndSendFile();
-                      },
-                    ),
-                  ListTile(
-                    leading: const Icon(Icons.emoji_emotions_outlined, color: Colors.orange),
-                    title: const Text('استیکر'),
-                    subtitle: const Text('انتخاب از پک‌های آماده', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _showStickerPicker();
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.gif_box_outlined, color: Colors.blue),
-                    title: const Text('GIF'),
-                    subtitle: const Text('گیف‌های ذخیره‌شده شما (فایل .gif آپلود کنید)', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _showGifPicker();
-                    },
-                  ),
-                  if (_can('send_files'))
-                    ListTile(
-                      leading: const Icon(Icons.music_note, color: Colors.purple),
-                      title: const Text('موسیقی / فایل صوتی'),
-                      subtitle: const Text('ارسال آهنگ با پخش‌کننده داخلی', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickAndSendMusic();
-                      },
-                    ),
-                  ListTile(
-                    key: const ValueKey('attach-poll'),
-                    leading: const Icon(Icons.poll_outlined, color: Colors.indigo),
-                    title: const Text('نظرسنجی'),
-                    subtitle: const Text('سؤال با چند گزینه، مثل تلگرام', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _createPoll();
-                    },
-                  ),
-                  ListTile(
-                    key: const ValueKey('attach-quiz'),
-                    leading: const Icon(Icons.quiz_outlined, color: Colors.deepPurple),
-                    title: const Text('آزمون (چهارگزینه‌ای)'),
-                    subtitle: const Text('یک گزینه صحیح دارد و نتیجه اعلام می‌شود', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _createPoll(quiz: true);
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.location_on_outlined, color: Colors.green),
-                    title: const Text('موقعیت مکانی'),
-                    subtitle: const Text('ارسال لوکیشن ثابت یا زنده', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _sendLocation();
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.enhanced_encryption_outlined, color: Colors.amber),
-                    title: const Text('پیام رمزدار'),
-                    subtitle: const Text('قفل متن با رمز (بدون رمز باز نمی‌شود)', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _sendEncryptedText();
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.circle, color: Colors.teal),
-                    title: const Text('پیام ویدیویی گرد'),
-                    subtitle: const Text('ویدیو دایره‌ای مانند تلگرام (video_note)', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _recordVideoNote();
-                    },
-                  ),
-                  const Divider(height: 1),
-                  SwitchListTile(
-                    secondary: const Icon(Icons.visibility_off_outlined, color: Colors.purple),
-                    title: const Text('حالت اسپویلر (مخفی تا زمان لمس)'),
-                    subtitle: const Text('پیام بعدی محو نمایش داده می‌شود', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    value: _isSpoiler,
-                    onChanged: (val) {
-                      setSheetState(() {});
-                      setState(() => _isSpoiler = val);
-                    },
-                  ),
-                  const SizedBox(height: 12),
                 ],
               ),
+              child: Icon(icon, color: Colors.white, size: 22),
+            );
+          }
+
+          return Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF17212B) : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+                  blurRadius: 16,
+                  offset: const Offset(0, -4),
+                ),
+              ],
             ),
-          ),
-        ),
+            child: SafeArea(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 4,
+                        margin: const EdgeInsets.only(top: 12, bottom: 12),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white24 : Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      if (_can('send_photos'))
+                        ListTile(
+                          leading: attachBadge(Icons.photo_library_rounded, const [Color(0xFF8E2DE2), Color(0xFF4A00E0)]),
+                          title: const Text('عکس از گالری', style: TextStyle(fontWeight: FontWeight.w600)),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _pickAndSendMedia(ImageSource.gallery);
+                          },
+                        ),
+                      if (_can('send_photos'))
+                        ListTile(
+                          leading: attachBadge(Icons.camera_alt_rounded, const [Color(0xFF00C6FF), Color(0xFF0072FF)]),
+                          title: const Text('دوربین', style: TextStyle(fontWeight: FontWeight.w600)),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _pickAndSendMedia(ImageSource.camera);
+                          },
+                        ),
+                      if (_can('send_videos'))
+                        ListTile(
+                          leading: attachBadge(Icons.videocam_rounded, const [Color(0xFFFF416C), Color(0xFFFF4B2B)]),
+                          title: const Text('ویدیو', style: TextStyle(fontWeight: FontWeight.w600)),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _pickAndSendMedia(ImageSource.gallery, isVideo: true);
+                          },
+                        ),
+                      if (_can('send_files'))
+                        ListTile(
+                          leading: attachBadge(Icons.insert_drive_file_rounded, const [Color(0xFFF7971E), Color(0xFFFFD200)]),
+                          title: const Text('ارسال فایل (اسناد، PDF، ZIP، PNG، TXT، ...)', style: TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: const Text('همه فرمت‌ها مانند تلگرام پشتیبانی می‌شوند', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _pickAndSendFile();
+                          },
+                        ),
+                      ListTile(
+                        leading: attachBadge(Icons.emoji_emotions_rounded, const [Color(0xFFFF0844), Color(0xFFFFB199)]),
+                        title: const Text('استیکر', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('انتخاب از پک‌های آماده', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _showStickerPicker();
+                        },
+                      ),
+                      ListTile(
+                        leading: attachBadge(Icons.gif_box_rounded, const [Color(0xFF43E97B), Color(0xFF38F9D7)]),
+                        title: const Text('GIF', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('گیف‌های ذخیره‌شده شما (فایل .gif آپلود کنید)', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _showGifPicker();
+                        },
+                      ),
+                      if (_can('send_files'))
+                        ListTile(
+                          leading: attachBadge(Icons.music_note_rounded, const [Color(0xFF654EA3), Color(0xFFEAAFC8)]),
+                          title: const Text('موسیقی / فایل صوتی', style: TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: const Text('ارسال آهنگ با پخش‌کننده داخلی', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _pickAndSendMusic();
+                          },
+                        ),
+                      ListTile(
+                        key: const ValueKey('attach-poll'),
+                        leading: attachBadge(Icons.poll_rounded, const [Color(0xFF2193B0), Color(0xFF6DD5ED)]),
+                        title: const Text('نظرسنجی', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('سؤال با چند گزینه، مثل تلگرام', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _createPoll();
+                        },
+                      ),
+                      ListTile(
+                        key: const ValueKey('attach-quiz'),
+                        leading: attachBadge(Icons.quiz_rounded, const [Color(0xFF834D9B), Color(0xFFD04ED6)]),
+                        title: const Text('آزمون (چهارگزینه‌ای)', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('یک گزینه صحیح دارد و نتیجه اعلام می‌شود', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _createPoll(quiz: true);
+                        },
+                      ),
+                      ListTile(
+                        leading: attachBadge(Icons.location_on_rounded, const [Color(0xFF11998E), Color(0xFF38EF7D)]),
+                        title: const Text('موقعیت مکانی', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('ارسال لوکیشن ثابت یا زنده', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _sendLocation();
+                        },
+                      ),
+                      ListTile(
+                        leading: attachBadge(Icons.enhanced_encryption_rounded, const [Color(0xFFF2994A), Color(0xFFF2C94C)]),
+                        title: const Text('پیام رمزدار', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('قفل متن با رمز (بدون رمز باز نمی‌شود)', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _sendEncryptedText();
+                        },
+                      ),
+                      ListTile(
+                        leading: attachBadge(Icons.play_circle_fill_rounded, const [Color(0xFF00B4DB), Color(0xFF0083B0)]),
+                        title: const Text('پیام ویدیویی گرد', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('ویدیو دایره‌ای مانند تلگرام (video_note)', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _recordVideoNote();
+                        },
+                      ),
+                      Divider(color: theme.dividerColor.withValues(alpha: 0.3), height: 16),
+                      SwitchListTile(
+                        secondary: const Icon(Icons.visibility_off_outlined, color: Colors.purple),
+                        title: const Text('حالت اسپویلر (مخفی تا زمان لمس)', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('پیام بعدی محو نمایش داده می‌شود', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                        value: _isSpoiler,
+                        onChanged: (val) {
+                          setSheetState(() {});
+                          setState(() => _isSpoiler = val);
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -3087,16 +3155,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   ],
                 ),
               ),
-            // Compact bar – avoids overflow on 360dp screens: only attach + field + schedule/voice/send.
-            // Sticker/GIF/video_note/spoiler live inside attach sheet to keep delete-for-all visible.
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.attach_file_rounded),
-                  tooltip: 'پیوست (عکس، فایل، استیکر، GIF، ویدیو گرد)',
-                  onPressed: _sending ? null : _showAttachMenu,
-                ),
+            if (_sending && _uploadingType != null)
+              ChatUploadBanner(
+                mediaType: _uploadingType!,
+                fileName: _uploadingName,
+                isFa: Localizations.localeOf(context).languageCode == 'fa',
+              ),
+            if (_isRecording)
+              VoiceRecordingBar(
+                onCancel: _cancelVoiceRecord,
+                onSend: _toggleVoiceRecord,
+                isFa: Localizations.localeOf(context).languageCode == 'fa',
+              )
+            else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.attach_file_rounded),
+                    tooltip: 'پیوست (عکس، فایل، استیکر، GIF، ویدیو گرد)',
+                    onPressed: _sending ? null : _showAttachMenu,
+                  ),
                 if (_isSpoiler)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10, right: 2),

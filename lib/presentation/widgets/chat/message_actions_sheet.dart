@@ -47,7 +47,6 @@ class MessageActionsSheet extends StatelessWidget {
     final labels = ChatLabels.of(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      // Copy only the exact body/caption, not the author, quote or timestamp.
       await Clipboard.setData(ClipboardData(text: text));
       if (!context.mounted) return;
       Navigator.of(context).pop();
@@ -80,7 +79,6 @@ class MessageActionsSheet extends StatelessWidget {
       await MediaDownloadService.downloadMedia(
         mediaUrl: mediaUrl,
         fileName: fileName,
-        // Routes the file to the right album (Pictures/Movies/Music).
         messageType: message.messageType,
         mediaId: mediaId,
         chatId: message.chatId,
@@ -95,88 +93,135 @@ class MessageActionsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = ChatLabels.of(context);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     void closeAndRun(VoidCallback action) {
       Navigator.of(context).pop();
       action();
     }
 
+    Widget actionTile({
+      Key? key,
+      required IconData icon,
+      required String title,
+      required VoidCallback onTap,
+      Color? iconColor,
+      Color? textColor,
+    }) {
+      final color = iconColor ?? (isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary);
+      return ListTile(
+        key: key,
+        leading: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            color: textColor ?? theme.textTheme.bodyLarge?.color,
+          ),
+        ),
+        onTap: () => closeAndRun(onTap),
+      );
+    }
+
     return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (canReply)
-              ListTile(
-                leading: const Icon(Icons.reply),
-                title: Text(labels.reply),
-                onTap: () => closeAndRun(onReply),
-              ),
-            if (message.copyableText != null)
-              ListTile(
-                key: const ValueKey('copy-message'),
-                leading: const Icon(Icons.copy_outlined),
-                title: Text(labels.copy),
-                onTap: () => _copy(context),
-              ),
-            if (message.mediaId != null && !message.isViewOnce)
-              ListTile(
-                key: const ValueKey('download-media'),
-                leading: const Icon(Icons.download_rounded),
-                title: const Text('دانلود / ذخیره در دستگاه'),
-                onTap: () => _download(context),
-              ),
-            if (canPin && onTogglePin != null)
-              ListTile(
-                key: const ValueKey('pin-message'),
-                leading: Icon(
-                  message.isPinned
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (canReply)
+                actionTile(
+                  icon: Icons.reply_rounded,
+                  title: labels.reply,
+                  onTap: onReply,
+                ),
+              if (message.copyableText != null)
+                actionTile(
+                  key: const ValueKey('copy-message'),
+                  icon: Icons.copy_rounded,
+                  title: labels.copy,
+                  onTap: () => _copy(context),
+                ),
+              if (message.mediaId != null && !message.isViewOnce)
+                actionTile(
+                  key: const ValueKey('download-media'),
+                  icon: Icons.download_rounded,
+                  title: 'دانلود / ذخیره در دستگاه',
+                  onTap: () => _download(context),
+                ),
+              if (canPin && onTogglePin != null)
+                actionTile(
+                  key: const ValueKey('pin-message'),
+                  icon: message.isPinned
                       ? Icons.push_pin_outlined
                       : Icons.push_pin_rounded,
+                  title: message.isPinned ? labels.unpinMessage : labels.pinMessage,
+                  onTap: () => onTogglePin!(!message.isPinned),
                 ),
-                title: Text(
-                  message.isPinned ? labels.unpinMessage : labels.pinMessage,
+              if (canEdit && onEdit != null)
+                actionTile(
+                  key: const ValueKey('edit-message'),
+                  icon: Icons.edit_rounded,
+                  title: 'ویرایش',
+                  onTap: onEdit!,
                 ),
-                onTap: () =>
-                    closeAndRun(() => onTogglePin!(!message.isPinned)),
+              if (!message.isViewOnce)
+                if (canForward)
+                  actionTile(
+                    icon: Icons.forward_rounded,
+                    title: labels.forward,
+                    onTap: onForward,
+                  )
+                else
+                  ListTile(
+                    leading: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.block_rounded, color: Colors.grey, size: 20),
+                    ),
+                    title: const Text(
+                      'فوروارد غیرفعال است',
+                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: const Text(
+                      'مدیر فوروارد از این گفتگو را بسته است',
+                      style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                    ),
+                    enabled: false,
+                  ),
+              Divider(color: theme.dividerColor.withValues(alpha: 0.4), height: 16),
+              actionTile(
+                icon: Icons.delete_outline_rounded,
+                title: labels.deleteForMe,
+                textColor: Colors.redAccent.shade200,
+                iconColor: Colors.redAccent,
+                onTap: () => onDelete(false),
               ),
-            if (canEdit && onEdit != null)
-              ListTile(
-                key: const ValueKey('edit-message'),
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('ویرایش'),
-                onTap: () => closeAndRun(onEdit!),
-              ),
-            if (!message.isViewOnce)
-              if (canForward)
-                ListTile(
-                  leading: const Icon(Icons.forward),
-                  title: Text(labels.forward),
-                  onTap: () => closeAndRun(onForward),
-                )
-              else
-                const ListTile(
-                  leading: Icon(Icons.block_outlined, color: Colors.grey),
-                  title: Text('فوروارد غیرفعال است',
-                      style: TextStyle(color: Colors.grey)),
-                  subtitle: Text('مدیر فوروارد از این گفتگو را بسته است',
-                      style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  enabled: false,
+              if (canDeleteForAll)
+                actionTile(
+                  icon: Icons.delete_forever_rounded,
+                  title: labels.deleteForAll,
+                  textColor: Colors.red,
+                  iconColor: Colors.red,
+                  onTap: () => onDelete(true),
                 ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: Text(labels.deleteForMe),
-              onTap: () => closeAndRun(() => onDelete(false)),
-            ),
-            if (canDeleteForAll)
-              ListTile(
-                leading: const Icon(Icons.delete_forever, color: Colors.red),
-                title: Text(
-                  labels.deleteForAll,
-                  style: const TextStyle(color: Colors.red),
-                ),
-                onTap: () => closeAndRun(() => onDelete(true)),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -14,14 +14,7 @@ import 'two_factor_screen.dart';
 enum PhoneVerificationFlow { registration, login }
 
 /// Telegram-style code entry for both registration and phone-first login.
-/// The code is intentionally never kept in persistent storage.
-///
-/// Round 2 additions:
-///  * Point 1 — a live countdown showing when the code can be sent again.
-///  * Point 3 — when the account already has a live session the server sends
-///    the code inside the app, so the copy changes and an explicit
-///    "send by SMS instead" action is offered.
-///  * Point 6 — a "contact support" entry point for people stuck here.
+/// Redesigned with countdown timer ring, OTP styling, and smooth feedback.
 class PhoneVerificationScreen extends ConsumerStatefulWidget {
   final String verificationId;
   final String mobileNumber;
@@ -58,7 +51,6 @@ class _PhoneVerificationScreenState
   String? _error;
   String? _message;
 
-  /// Point 1: countdown until a new code can be requested.
   Timer? _ticker;
   int _secondsLeft = 0;
 
@@ -96,7 +88,6 @@ class _PhoneVerificationScreenState
     });
   }
 
-  /// mm:ss, always two digits, so the label never jumps around.
   String get _countdownLabel {
     final minutes = (_secondsLeft ~/ 60).toString().padLeft(2, '0');
     final seconds = (_secondsLeft % 60).toString().padLeft(2, '0');
@@ -153,7 +144,6 @@ class _PhoneVerificationScreenState
         );
   }
 
-  /// [forceSms] maps to Point 3's "send by SMS instead" escape hatch.
   Future<void> _resend({bool forceSms = false}) async {
     if (_loading || _resending) return;
     if (_secondsLeft > 0 && !forceSms) return;
@@ -184,7 +174,6 @@ class _PhoneVerificationScreenState
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _error = error.message);
-      // A 429 carries the remaining wait; reflect it in the timer.
       final retryAfter = error.details['retry_after_seconds'];
       if (retryAfter is num) _startCountdown(retryAfter.toInt());
     } catch (_) {
@@ -210,30 +199,61 @@ class _PhoneVerificationScreenState
   Widget build(BuildContext context) {
     final registering = widget.flow == PhoneVerificationFlow.registration;
     final waiting = _secondsLeft > 0;
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(registering ? 'تأیید شماره موبایل' : 'ورود با شماره موبایل'),
+        title: Text(
+          registering ? 'تأیید شماره موبایل' : 'ورود با شماره موبایل',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
       ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(
-                  _inApp ? Icons.forum_outlined : Icons.sms_outlined,
-                  size: 68,
-                  color: Colors.blue,
+                Center(
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: _inApp
+                            ? [const Color(0xFF00ACC1), const Color(0xFF2481CC)]
+                            : [const Color(0xFF2AABEE), const Color(0xFF1D70B8)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primary.withValues(alpha: 0.3),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      _inApp ? Icons.forum_rounded : Icons.sms_rounded,
+                      size: 40,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 22),
                 Text(
                   registering
                       ? 'شماره خود را تأیید کنید'
                       : 'کد ورود را وارد کنید',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
@@ -243,97 +263,144 @@ class _PhoneVerificationScreenState
                           '${widget.mobileNumber} وارد شده‌اید فرستادیم.'
                       : 'کد ۶ رقمی به ${widget.mobileNumber} پیامک شد.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.grey),
+                  style: TextStyle(
+                    color: theme.textTheme.bodySmall?.color,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
                 ),
                 if (_inApp) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
+                        horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
+                      color: primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: primary.withValues(alpha: 0.25),
+                      ),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.info_outline, size: 18, color: Colors.blue),
-                        SizedBox(width: 8),
+                        Icon(Icons.info_outline_rounded, size: 20, color: primary),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'چون قبلاً با این شماره وارد شده‌اید، کد به‌جای '
-                            'پیامک داخل برنامه ارسال شد.',
-                            style: TextStyle(fontSize: 12),
+                            'برنامه روی دستگاه قبلی خود را باز کنید و کد را در بخش '
+                            'اعلان‌ها یا چت سرویس بخوانید.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: theme.textTheme.bodyMedium?.color,
+                              height: 1.35,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
                 ],
-                const SizedBox(height: 26),
+                const SizedBox(height: 28),
                 TextField(
                   controller: _codeCtrl,
-                  autofocus: true,
                   keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.done,
                   maxLength: 6,
+                  autofocus: true,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 28, letterSpacing: 10),
+                  textDirection: TextDirection.ltr,
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 14,
+                  ),
                   decoration: InputDecoration(
-                    labelText: _inApp ? 'کد ارسال‌شده در برنامه' : 'کد پیامک',
+                    labelText: 'کد تأیید ۶ رقمی',
                     counterText: '',
+                    hintText: '• • • • • •',
+                    hintStyle: TextStyle(
+                      color: Colors.grey.shade400,
+                      letterSpacing: 10,
+                      fontSize: 26,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
                   ),
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   onSubmitted: (_) => _verify(),
                 ),
                 if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.red),
-                    textAlign: TextAlign.center,
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.red, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ],
                 if (_message != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _message!,
-                    style: const TextStyle(color: Colors.green),
-                    textAlign: TextAlign.center,
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      _message!,
+                      style: const TextStyle(color: Colors.green, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 24),
                 SizedBox(
-                  height: 50,
+                  height: 52,
                   child: ElevatedButton(
                     onPressed: _loading ? null : _verify,
+                    style: ElevatedButton.styleFrom(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
                     child: _loading
                         ? const SizedBox(
                             width: 24,
                             height: 24,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
+                              strokeWidth: 2.2,
                               color: Colors.white,
                             ),
                           )
-                        : Text(registering ? 'تأیید و ورود' : 'ورود'),
+                        : Text(
+                            registering ? 'تأیید' : 'ورود',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                // Point 1: the countdown replaces the resend button until the
-                // server is willing to send another code.
+                const SizedBox(height: 18),
                 if (waiting)
-                  Row(
+                  Container(
                     key: const ValueKey('resend-countdown'),
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.timer_outlined,
-                          size: 18, color: Colors.grey),
-                      const SizedBox(width: 6),
-                      Text(
-                        'ارسال دوباره کد تا $_countdownLabel دیگر',
-                        style: const TextStyle(color: Colors.grey),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'ارسال دوباره کد تا $_countdownLabel دیگر',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: theme.textTheme.bodySmall?.color,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500,
                       ),
-                    ],
+                    ),
                   )
                 else
                   TextButton.icon(
@@ -341,28 +408,33 @@ class _PhoneVerificationScreenState
                     onPressed: _resending ? null : () => _resend(),
                     icon: _resending
                         ? const SizedBox(
-                            height: 16,
                             width: 16,
+                            height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.refresh, size: 18),
-                    label: const Text('کد را دریافت نکردید؟ ارسال دوباره'),
+                        : const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text(
+                      'ارسال دوباره کد',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
-                // Point 3: always allow falling back to SMS.
-                if (_inApp)
-                  TextButton.icon(
+                if (_inApp) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
                     key: const ValueKey('force-sms-button'),
                     onPressed: _resending ? null : () => _resend(forceSms: true),
                     icon: const Icon(Icons.sms_outlined, size: 18),
                     label: const Text('ارسال کد با پیامک'),
                   ),
-                const Divider(height: 28),
-                // Point 6.
-                TextButton.icon(
-                  key: const ValueKey('contact-support-button'),
-                  onPressed: _loading ? null : _contactSupport,
-                  icon: const Icon(Icons.support_agent, size: 18),
-                  label: const Text('کد به دستم نمی‌رسد — تماس با پشتیبانی'),
+                ],
+                const SizedBox(height: 12),
+                Center(
+                  child: TextButton.icon(
+                    key: const ValueKey('contact-support-button'),
+                    icon: const Icon(Icons.support_agent_rounded, size: 18),
+                    label: const Text('تماس با پشتیبانی'),
+                    onPressed: _contactSupport,
+                  ),
                 ),
               ],
             ),

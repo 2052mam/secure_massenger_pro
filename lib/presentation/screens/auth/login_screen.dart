@@ -96,9 +96,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  /// Telegram behaviour: a number that has never registered is taken to the
-  /// sign-up form instead of receiving an SMS code. The server is the source
-  /// of truth (`registration_required`), so no code can leak to a new number.
   Future<void> _submitPhone() async {
     final mobile = _mobileCtrl.text.trim();
     final response = await ApiService().post('/auth/request-phone-code', {
@@ -118,7 +115,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           verificationId: verificationId,
           mobileNumber: response['mobile_number'] as String? ?? mobile,
           flow: PhoneVerificationFlow.login,
-          // Point 3: the server decides between an in-app code and an SMS.
           deliveryChannel: response['delivery_channel'] as String? ?? 'sms',
           resendAfterSeconds:
               (response['resend_after_seconds'] as num?)?.toInt() ?? 300,
@@ -127,7 +123,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  /// Sends the user to registration with the number already filled in.
   Future<void> _openRegistration(String mobileNumber) async {
     if (!mounted) return;
     setState(() => _error = null);
@@ -143,7 +138,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  /// Point 6: opens the support sheet with whatever number was typed.
   Future<void> _contactSupport() async {
     final sent = await showSupportContactSheet(
       context,
@@ -203,6 +197,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final canPop = widget.isAddAccount && Navigator.of(context).canPop();
     final phoneMode = !_legacyMode;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primary = theme.colorScheme.primary;
+
     return Scaffold(
       appBar: widget.isAddAccount
           ? AppBar(
@@ -219,18 +217,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.lock_outline_rounded, size: 72, color: AppTheme.primaryColor),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+                  // Telegram-style branded emblem
+                  Center(
+                    child: Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF2AABEE),
+                            primary,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: primary.withValues(alpha: 0.35),
+                            blurRadius: 20,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.send_rounded,
+                          size: 44,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                   Text(
                     widget.isAddAccount ? 'افزودن حساب جدید' : 'ورود به SecureMessenger',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
@@ -238,68 +272,101 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     phoneMode
                         ? 'شماره موبایل خود را وارد کنید؛ اگر ثبت‌نام نکرده‌اید به صفحه ثبت‌نام می‌روید'
                         : 'ورود ایمیلی فقط برای حساب‌های قدیمیِ بدون شماره موبایل است',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                    style: TextStyle(
+                      color: theme.textTheme.bodySmall?.color,
+                      fontSize: 13.5,
+                      height: 1.35,
+                    ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 28),
                   if (_saved.isNotEmpty) ...[
                     Align(
                       alignment: AlignmentDirectional.centerStart,
-                      child: Text('ادامه با حساب‌های ذخیره‌شده', style: Theme.of(context).textTheme.labelLarge),
+                      child: Text(
+                        'ادامه با حساب‌های ذخیره‌شده',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                          color: primary,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     ..._saved.map(
-                      (account) => Card(
+                      (account) => Container(
                         margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF17212B) : Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: theme.dividerColor.withValues(alpha: 0.35),
+                          ),
+                        ),
                         child: ListTile(
                           leading: ChatAvatar(
                             title: account.displayName,
                             url: account.avatarUrl,
                             token: account.accessToken,
+                            radius: 20,
                           ),
-                          title: Text(account.displayName),
+                          title: Text(account.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: Text(account.handle),
                           trailing: _switching
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                              : const Icon(Icons.login, size: 20),
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.arrow_forward_ios_rounded, size: 14),
                           onTap: _switching ? null : () => _useSavedAccount(account),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Row(
+                    const SizedBox(height: 16),
+                    Row(
                       children: [
-                        Expanded(child: Divider()),
-                        Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('یا')),
-                        Expanded(child: Divider()),
+                        Expanded(child: Divider(color: theme.dividerColor.withValues(alpha: 0.3))),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'یا ورود با شماره دیگر',
+                            style: TextStyle(fontSize: 12, color: theme.textTheme.bodySmall?.color),
+                          ),
+                        ),
+                        Expanded(child: Divider(color: theme.dividerColor.withValues(alpha: 0.3))),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 18),
                   ],
-                  if (phoneMode)
+                  if (phoneMode) ...[
                     TextFormField(
                       controller: _mobileCtrl,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
+                      autofocus: !widget.isAddAccount && _saved.isEmpty,
+                      textDirection: TextDirection.ltr,
+                      decoration: InputDecoration(
                         labelText: 'شماره موبایل',
-                        hintText: '09149141414',
-                        prefixIcon: Icon(Icons.phone_outlined),
-                        helperText: 'با کد کشور وارد کنید؛ مثال: 09121234567',
+                        hintText: '+989121234567',
+                        hintTextDirection: TextDirection.ltr,
+                        prefixIcon: Icon(Icons.phone_iphone_rounded, color: primary),
+                        helperText: 'شماره همراه با کد کشور (مثال: +989121234567 یا 09121234567)',
                       ),
-                      validator: (value) => _validPhone(value ?? '') ? null : 'شماره موبایل نامعتبر است',
-                    )
-                  else ...[
+                      validator: (value) => _validPhone(value ?? '')
+                          ? null
+                          : 'شماره موبایل معتبر نیست',
+                    ),
+                  ] else ...[
                     TextFormField(
                       controller: _emailCtrl,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'ایمیل',
-                        prefixIcon: Icon(Icons.email_outlined),
+                        prefixIcon: Icon(Icons.email_outlined, color: primary),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return 'ایمیل الزامی است';
-                        return value.contains('@') ? null : 'ایمیل نامعتبر';
-                      },
+                      validator: (value) => (value == null || !value.contains('@'))
+                          ? 'ایمیل نامعتبر است'
+                          : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -307,61 +374,111 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       obscureText: _obscure,
                       decoration: InputDecoration(
                         labelText: 'رمز عبور',
-                        prefixIcon: const Icon(Icons.lock_outline),
+                        prefixIcon: Icon(Icons.lock_outline_rounded, color: primary),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                          icon: Icon(
+                            _obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                          ),
                           onPressed: () => setState(() => _obscure = !_obscure),
                         ),
                       ),
-                      validator: (value) => (value == null || value.length < 8) ? 'حداقل ۸ کاراکتر' : null,
+                      validator: (value) => (value == null || value.length < 6)
+                          ? 'رمز عبور حداقل ۶ کاراکتر است'
+                          : null,
                     ),
                   ],
                   if (_error != null) ...[
-                    const SizedBox(height: 16),
-                    Text(_error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: Colors.red, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 24),
                   SizedBox(
-                    height: 50,
+                    height: 52,
                     child: ElevatedButton(
                       onPressed: _loading ? null : _submit,
-                      child: _loading
-                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : Text(phoneMode ? 'ادامه' : 'ورود'),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _loading
-                        ? null
-                        : () => setState(() {
-                              _legacyMode = !_legacyMode;
-                              _error = null;
-                            }),
-                    child: Text(phoneMode ? 'حساب قدیمی دارم (ورود با ایمیل)' : 'ورود با شماره موبایل'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => RegisterScreen(
-                          initialMobileNumber: _mobileCtrl.text.trim(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primary,
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
+                      child: _loading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              phoneMode ? 'ادامه' : 'ورود',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
-                    child: const Text('حساب ندارید؟ ثبت‌نام کنید'),
                   ),
-                  const Divider(height: 24),
-                  // Point 6: reachable before the user has any session.
-                  TextButton.icon(
-                    key: const ValueKey('login-contact-support'),
-                    onPressed: _loading ? null : _contactSupport,
-                    icon: const Icon(Icons.support_agent, size: 18),
-                    label: const Text('مشکلی در ورود دارید؟ تماس با پشتیبانی'),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _legacyMode = !_legacyMode;
+                          _error = null;
+                        }),
+                        child: Text(
+                          phoneMode ? 'ورود با ایمیل و رمز' : 'ورود با شماره موبایل',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      TextButton.icon(
+                        key: const ValueKey('login-contact-support'),
+                        icon: const Icon(Icons.support_agent_rounded, size: 18),
+                        label: const Text('پشتیبانی', style: TextStyle(fontSize: 13)),
+                        onPressed: _contactSupport,
+                      ),
+                    ],
                   ),
-                  if (canPop)
-                    TextButton.icon(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.arrow_back, size: 18),
-                      label: const Text('انصراف و بازگشت به حساب فعلی'),
+                  const SizedBox(height: 16),
+                  if (!widget.isAddAccount)
+                    Center(
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const RegisterScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'حساب ندارید؟ ثبت‌نام کنید',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
+                        ),
+                      ),
                     ),
                 ],
               ),

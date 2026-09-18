@@ -75,9 +75,14 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final labels = MediaLabels.of(context);
-    final bg = isMine ? theme.colorScheme.primary : theme.cardColor;
-    final fg = isMine ? Colors.white : theme.colorScheme.onSurface;
+
+    // Color psychology: Outgoing gets confident sapphire gradient; incoming gets crisp resting neutral
+    final bg = isMine
+        ? (isDark ? const Color(0xFF2B5278) : theme.colorScheme.primary)
+        : (isDark ? const Color(0xFF1E2C3A) : Colors.white);
+    final fg = isMine ? Colors.white : (isDark ? Colors.white : const Color(0xFF1E293B));
     final quote = reply ?? message.replyTo;
     final rendersMedia =
         ((message.messageType == 'image' || message.messageType == 'video') &&
@@ -89,32 +94,53 @@ class MessageBubble extends StatelessWidget {
         rendersMedia &&
         message.content?.trim().isNotEmpty == true;
 
+    // Telegram bubble corners: 18px everywhere except 4px on the bottom tail corner
+    final borderRadius = BorderRadius.only(
+      topLeft: const Radius.circular(18),
+      topRight: const Radius.circular(18),
+      bottomLeft: Radius.circular(isMine ? 18 : 4),
+      bottomRight: Radius.circular(isMine ? 4 : 18),
+    );
+
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        margin: const EdgeInsets.symmetric(vertical: 3),
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(vertical: 2.5, horizontal: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+          maxWidth: MediaQuery.sizeOf(context).width * 0.82,
         ),
         decoration: BoxDecoration(
           color: bg,
+          gradient: isMine
+              ? LinearGradient(
+                  colors: isDark
+                      ? const [Color(0xFF2E5B88), Color(0xFF264C72)]
+                      : [
+                          theme.colorScheme.primary,
+                          theme.colorScheme.primary.withValues(alpha: 0.92),
+                        ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
           border: Border.all(
-            color: highlighted ? Colors.amber : Colors.transparent,
-            width: 2,
+            color: highlighted
+                ? Colors.amber.shade400
+                : (isMine
+                    ? Colors.transparent
+                    : (isDark
+                        ? const Color(0xFF27384A)
+                        : const Color(0xFFE2E8F0))),
+            width: highlighted ? 2 : 0.8,
           ),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMine ? 16 : 4),
-            bottomRight: Radius.circular(isMine ? 4 : 16),
-          ),
+          borderRadius: borderRadius,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 3,
-              offset: const Offset(0, 1),
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 4,
+              offset: const Offset(0, 1.5),
             ),
           ],
         ),
@@ -124,17 +150,16 @@ class MessageBubble extends StatelessWidget {
           children: [
             if (showSender && !isMine && (message.author != null || message.sender != null))
               Padding(
-                padding: const EdgeInsets.only(bottom: 5),
+                padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Publishing admin name (channel signature / group author).
                     Flexible(
                       child: Text(
                         message.author?.displayName ?? message.sender!.displayName,
                         style: TextStyle(
-                          color: theme.colorScheme.primary,
-                          fontSize: 12,
+                          color: isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                         ),
                         maxLines: 1,
@@ -147,23 +172,25 @@ class MessageBubble extends StatelessWidget {
                         child: Text(
                           '@${message.author!.username}',
                           style: TextStyle(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                            color: (isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary)
+                                .withValues(alpha: 0.75),
                             fontSize: 11,
                           ),
                         ),
                       ),
                     if (message.author != null)
                       Container(
-                        margin: const EdgeInsets.only(right: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        margin: const EdgeInsets.only(right: 5),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                          color: (isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary)
+                              .withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           'مدیر',
                           style: TextStyle(
-                            color: theme.colorScheme.primary,
+                            color: isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                           ),
@@ -229,9 +256,9 @@ class MessageBubble extends StatelessWidget {
                   child: GestureDetector(
                     onTap: onOpenPhoto,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 320),
+                        constraints: const BoxConstraints(maxHeight: 340),
                         child: CachedNetworkImage(
                           imageUrl: mediaUrl,
                           httpHeaders: token == null
@@ -239,21 +266,26 @@ class MessageBubble extends StatelessWidget {
                               : {'Authorization': 'Bearer $token'},
                           width: 280,
                           fit: BoxFit.cover,
-                          placeholder: (_, __) => const SizedBox(
+                          placeholder: (_, __) => Container(
                             width: 280,
                             height: 180,
+                            color: isDark ? Colors.black26 : const Color(0xFFF1F5F9),
                             child: Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: isMine ? Colors.white70 : theme.colorScheme.primary,
+                              ),
                             ),
                           ),
-                          errorWidget: (_, __, ___) => SizedBox(
+                          errorWidget: (_, __, ___) => Container(
                             width: 220,
-                            height: 100,
+                            height: 110,
+                            color: isDark ? Colors.black26 : const Color(0xFFF1F5F9),
                             child: Center(
                               child: Icon(
-                                Icons.broken_image_outlined,
+                                Icons.broken_image_rounded,
                                 size: 40,
-                                color: fg,
+                                color: fg.withValues(alpha: 0.6),
                               ),
                             ),
                           ),
@@ -270,18 +302,18 @@ class MessageBubble extends StatelessWidget {
                 children: [
                   if (message.isMuted)
                     Container(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      margin: const EdgeInsets.only(bottom: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.black45,
+                        color: Colors.black54,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.volume_off, size: 12, color: Colors.white),
+                          Icon(Icons.volume_off_rounded, size: 12, color: Colors.white),
                           SizedBox(width: 4),
-                          Text('بی‌صدا', style: TextStyle(color: Colors.white, fontSize: 10)),
+                          Text('بی‌صدا', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -320,36 +352,63 @@ class MessageBubble extends StatelessWidget {
                       child: CachedNetworkImage(
                         imageUrl: mediaUrl,
                         httpHeaders: token == null ? null : {'Authorization': 'Bearer $token'},
-                        width: 140,
-                        height: 140,
+                        width: 150,
+                        height: 150,
                         fit: BoxFit.contain,
-                        placeholder: (_, __) => const SizedBox(width: 80, height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
-                        errorWidget: (_, __, ___) => Text(message.content ?? 'استیکر', style: TextStyle(fontSize: 48)),
+                        placeholder: (_, __) => const SizedBox(
+                          width: 80,
+                          height: 80,
+                          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                        ),
+                        errorWidget: (_, __, ___) => Text(
+                          message.content ?? 'استیکر',
+                          style: const TextStyle(fontSize: 48),
+                        ),
                       ),
                     )
                   : Text(message.content ?? 'استیکر', style: TextStyle(fontSize: 48, color: fg))
             else if (message.messageType == 'gif')
               mediaUrl.isNotEmpty
                   ? ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       child: Stack(
                         children: [
                           CachedNetworkImage(
                             imageUrl: mediaUrl,
                             httpHeaders: token == null ? null : {'Authorization': 'Bearer $token'},
-                            width: 220,
-                            height: 160,
+                            width: 230,
+                            height: 165,
                             fit: BoxFit.cover,
-                            placeholder: (_, __) => Container(width: 220, height: 160, color: Colors.black12, child: const Center(child: CircularProgressIndicator(strokeWidth: 2))),
-                            errorWidget: (_, __, ___) => Container(width: 220, height: 120, color: Colors.black12, child: Icon(Icons.gif_box, color: fg, size: 32)),
+                            placeholder: (_, __) => Container(
+                              width: 230,
+                              height: 165,
+                              color: Colors.black12,
+                              child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            ),
+                            errorWidget: (_, __, ___) => Container(
+                              width: 230,
+                              height: 120,
+                              color: Colors.black12,
+                              child: Icon(Icons.gif_box_rounded, color: fg, size: 36),
+                            ),
                           ),
                           Positioned(
                             bottom: 6,
                             left: 6,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
-                              child: const Text('GIF', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                              decoration: BoxDecoration(
+                                color: Colors.black60,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'GIF',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -393,7 +452,12 @@ class MessageBubble extends StatelessWidget {
                   text: message.content?.isNotEmpty == true
                       ? message.content!
                       : labels.type(message.messageType),
-                  style: TextStyle(color: fg, fontSize: 15, height: 1.35),
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: 15,
+                    height: 1.38,
+                    letterSpacing: -0.1,
+                  ),
                   linkColor: isMine ? Colors.white : theme.colorScheme.primary,
                   onInviteTap: onInviteTap,
                   onMentionTap: onMentionTap,
@@ -404,7 +468,7 @@ class MessageBubble extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 7),
                 child: MessageText(
                   text: message.content!,
-                  style: TextStyle(color: fg),
+                  style: TextStyle(color: fg, fontSize: 14.5),
                   linkColor: isMine ? Colors.white : theme.colorScheme.primary,
                   onInviteTap: onInviteTap,
                   onMentionTap: onMentionTap,
@@ -423,11 +487,11 @@ class MessageBubble extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.forward, size: 11, color: fg.withValues(alpha: 0.65)),
+                          Icon(Icons.forward_rounded, size: 11, color: fg.withValues(alpha: 0.7)),
                           const SizedBox(width: 2),
                           Text(
                             'فوروارد شده',
-                            style: TextStyle(color: fg.withValues(alpha: 0.65), fontSize: 10),
+                            style: TextStyle(color: fg.withValues(alpha: 0.7), fontSize: 10),
                           ),
                         ],
                       ),
@@ -438,7 +502,7 @@ class MessageBubble extends StatelessWidget {
                       child: Text(
                         'ویرایش شده',
                         style: TextStyle(
-                          color: fg.withValues(alpha: 0.65),
+                          color: fg.withValues(alpha: 0.7),
                           fontSize: 10,
                           fontStyle: FontStyle.italic,
                         ),
@@ -448,14 +512,15 @@ class MessageBubble extends StatelessWidget {
                     '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
                     textDirection: TextDirection.ltr,
                     style: TextStyle(
-                      color: fg.withValues(alpha: 0.65),
+                      color: fg.withValues(alpha: 0.7),
                       fontSize: 11,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   if (isMine) ...[
                     const SizedBox(width: 4),
                     Icon(
-                      message.status == 'sent' ? Icons.done : Icons.done_all,
+                      message.status == 'sent' ? Icons.done_rounded : Icons.done_all_rounded,
                       size: 16,
                       color: message.status == 'read'
                           ? const Color(0xFF4FC3F7)
@@ -505,26 +570,36 @@ class _ViewOnceTile extends StatelessWidget {
     final subtitle = expired
         ? 'این عکس منقضی شده است'
         : (isMine ? labels.sentOnce : labels.tapToOpen);
+
     return Semantics(
       button: onTap != null,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                viewed || expired
-                    ? Icons.timer_off_outlined
-                    : timed
-                        ? Icons.timer_10_outlined
-                        : Icons.timer_outlined,
-                color: color,
-                size: 30,
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.12),
+                  border: Border.all(color: color.withValues(alpha: 0.25), width: 1.2),
+                ),
+                child: Icon(
+                  viewed || expired
+                      ? Icons.timer_off_rounded
+                      : timed
+                          ? Icons.timer_10_rounded
+                          : Icons.timer_rounded,
+                  color: color,
+                  size: 24,
+                ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Flexible(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -534,7 +609,7 @@ class _ViewOnceTile extends StatelessWidget {
                       title,
                       style: TextStyle(
                         color: color,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
                     ),
@@ -543,7 +618,7 @@ class _ViewOnceTile extends StatelessWidget {
                       Text(
                         subtitle,
                         style: TextStyle(
-                          color: color.withValues(alpha: 0.75),
+                          color: color.withValues(alpha: 0.8),
                           fontSize: 12,
                         ),
                       ),

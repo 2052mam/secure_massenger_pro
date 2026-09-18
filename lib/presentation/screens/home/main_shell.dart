@@ -79,6 +79,8 @@ class _MainShellState extends ConsumerState<MainShell> {
     });
     final isFa = ref.watch(localeProvider).languageCode == 'fa';
     final index = ref.watch(shellIndexProvider);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     final pages = [
       const ChatListScreen(),
@@ -88,33 +90,51 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     return Scaffold(
       body: IndexedStack(index: index, children: pages),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const MiniMusicPlayer(),
-          NavigationBar(
-            selectedIndex: index,
-            onDestinationSelected: (i) =>
-                ref.read(shellIndexProvider.notifier).state = i,
-            destinations: [
-              NavigationDestination(
-                icon: const Icon(Icons.chat_bubble_outline),
-                selectedIcon: const Icon(Icons.chat_bubble),
-                label: isFa ? 'چت‌ها' : 'Chats',
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.search),
-                selectedIcon: const Icon(Icons.search),
-                label: isFa ? 'جستجو' : 'Search',
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.settings_outlined),
-                selectedIcon: const Icon(Icons.settings),
-                label: isFa ? 'تنظیمات' : 'Settings',
-              ),
-            ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF17212B) : Colors.white,
+          border: Border(
+            top: BorderSide(
+              color: theme.dividerColor.withValues(alpha: 0.35),
+              width: 0.7,
+            ),
           ),
-        ],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const MiniMusicPlayer(),
+            NavigationBar(
+              selectedIndex: index,
+              onDestinationSelected: (i) =>
+                  ref.read(shellIndexProvider.notifier).state = i,
+              destinations: [
+                NavigationDestination(
+                  icon: const Icon(Icons.chat_bubble_outline_rounded),
+                  selectedIcon: const Icon(Icons.chat_bubble_rounded),
+                  label: isFa ? 'چت‌ها' : 'Chats',
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.search_rounded),
+                  selectedIcon: const Icon(Icons.search_rounded),
+                  label: isFa ? 'جستجو' : 'Search',
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.settings_outlined),
+                  selectedIcon: const Icon(Icons.settings_rounded),
+                  label: isFa ? 'تنظیمات' : 'Settings',
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

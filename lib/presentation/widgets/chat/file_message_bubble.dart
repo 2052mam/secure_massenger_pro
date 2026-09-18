@@ -30,15 +30,27 @@ class _FileMessageBubbleState extends State<FileMessageBubble> {
 
   IconData _getFileIcon(String filename) {
     final ext = filename.split('.').last.toLowerCase();
-    if (['pdf'].contains(ext)) return Icons.picture_as_pdf;
-    if (['zip', 'rar', '7z', 'tar', 'gz'].contains(ext)) return Icons.folder_zip;
-    if (['doc', 'docx', 'txt'].contains(ext)) return Icons.description;
-    if (['xls', 'xlsx'].contains(ext)) return Icons.table_chart;
-    if (['ppt', 'pptx'].contains(ext)) return Icons.slideshow;
-    if (['apk'].contains(ext)) return Icons.android;
-    if (['mp3', 'wav', 'ogg'].contains(ext)) return Icons.audio_file;
-    if (['mp4', 'avi', 'mkv'].contains(ext)) return Icons.video_file;
-    return Icons.insert_drive_file;
+    if (['pdf'].contains(ext)) return Icons.picture_as_pdf_rounded;
+    if (['zip', 'rar', '7z', 'tar', 'gz'].contains(ext)) return Icons.folder_zip_rounded;
+    if (['doc', 'docx', 'txt'].contains(ext)) return Icons.description_rounded;
+    if (['xls', 'xlsx'].contains(ext)) return Icons.table_chart_rounded;
+    if (['ppt', 'pptx'].contains(ext)) return Icons.slideshow_rounded;
+    if (['apk'].contains(ext)) return Icons.android_rounded;
+    if (['mp3', 'wav', 'ogg'].contains(ext)) return Icons.audio_file_rounded;
+    if (['mp4', 'avi', 'mkv'].contains(ext)) return Icons.video_file_rounded;
+    return Icons.insert_drive_file_rounded;
+  }
+
+  Color _getFileColor(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    if (['pdf'].contains(ext)) return const Color(0xFFEF4444);
+    if (['zip', 'rar', '7z', 'tar', 'gz'].contains(ext)) return const Color(0xFFF59E0B);
+    if (['doc', 'docx', 'txt'].contains(ext)) return const Color(0xFF3B82F6);
+    if (['xls', 'xlsx'].contains(ext)) return const Color(0xFF10B981);
+    if (['apk'].contains(ext)) return const Color(0xFF84CC16);
+    if (['mp3', 'wav', 'ogg'].contains(ext)) return const Color(0xFF06B6D4);
+    if (['mp4', 'avi', 'mkv'].contains(ext)) return const Color(0xFF8B5CF6);
+    return const Color(0xFF64748B);
   }
 
   Future<void> _startDownload() async {
@@ -60,123 +72,102 @@ class _FileMessageBubbleState extends State<FileMessageBubble> {
         mediaId: widget.message.mediaId,
         chatId: widget.message.chatId,
         messageId: widget.message.id,
-        messageType: widget.message.messageType,
         onProgress: (received, total) {
-          if (mounted && total > 0) {
-            setState(() {
-              _progress = received / total;
-            });
+          if (total > 0 && mounted) {
+            setState(() => _progress = received / total);
           }
         },
       );
-
-      if (mounted) {
-        setState(() {
-          _downloading = false;
-          _downloadedPath = path;
-        });
-        SaveFeedback.success(context, fileName: fileName);
-      }
+      if (!mounted) return;
+      setState(() {
+        _downloading = false;
+        _downloadedPath = path;
+      });
+      SaveFeedback.success(context, fileName: fileName);
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _downloading = false;
-        });
-        SaveFeedback.failure(context, e);
-      }
+      if (!mounted) return;
+      setState(() => _downloading = false);
+      SaveFeedback.failure(context, e);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final fileName = widget.message.originalName ??
-        (widget.message.content?.isNotEmpty == true
-            ? widget.message.content!
-            : 'فایل ضمیمه');
-    final fileSizeText = widget.message.fileSize != null
-        ? MediaDownloadService.formatBytes(widget.message.fileSize!)
-        : '';
+        widget.message.content ??
+        'فایل پیوست';
     final fg = widget.foregroundColor;
+    final fileColor = _getFileColor(fileName);
 
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: widget.isMine
-            ? Colors.white.withValues(alpha: 0.15)
-            : Theme.of(context).primaryColor.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: widget.isMine
-                  ? Colors.white24
-                  : Theme.of(context).primaryColor.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              _getFileIcon(fileName),
-              color: fg,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  fileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: fg,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                if (fileSizeText.isNotEmpty || _downloadedPath != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
+    return InkWell(
+      onTap: _startDownload,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: widget.isMine
+                    ? Colors.white.withValues(alpha: 0.2)
+                    : fileColor.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (_downloading)
+                    CircularProgressIndicator(
+                      value: _progress > 0 ? _progress : null,
+                      strokeWidth: 2.5,
+                      color: widget.isMine ? Colors.white : fileColor,
+                    ),
+                  Icon(
                     _downloadedPath != null
-                        ? 'ذخیره شده ($fileSizeText)'
-                        : fileSizeText,
+                        ? Icons.check_circle_rounded
+                        : _getFileIcon(fileName),
+                    color: widget.isMine ? Colors.white : fileColor,
+                    size: 24,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    fileName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: fg.withValues(alpha: 0.75),
-                      fontSize: 11,
+                      color: fg,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _downloading
+                        ? 'در حال دانلود… ${(_progress * 100).toInt()}%'
+                        : _downloadedPath != null
+                            ? 'ذخیره شد در حافظه'
+                            : 'برای دانلود ضربه بزنید',
+                    style: TextStyle(
+                      color: fg.withValues(alpha: 0.72),
+                      fontSize: 11.5,
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: _downloading ? null : _startDownload,
-            icon: _downloading
-                ? SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      value: _progress > 0 ? _progress : null,
-                      strokeWidth: 2.5,
-                      color: fg,
-                    ),
-                  )
-                : Icon(
-                    _downloadedPath != null
-                        ? Icons.check_circle_outline
-                        : Icons.download_rounded,
-                    color: fg,
-                    size: 26,
-                  ),
-            tooltip: 'دانلود فایل',
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
