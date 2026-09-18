@@ -87,6 +87,7 @@ class ChatLabels {
   String get unpinChat => isFa ? 'برداشتن سنجاق' : 'Unpin';
   String get pinMessage => isFa ? 'سنجاق کردن پیام' : 'Pin message';
   String get unpinMessage => isFa ? 'برداشتن سنجاق پیام' : 'Unpin message';
+  String get pinnedMessage => isFa ? 'پیام سنجاق‌شده' : 'Pinned message';
   String get pinnedMessages => isFa ? 'پیام‌های سنجاق‌شده' : 'Pinned messages';
   String get unpinAll => isFa ? 'برداشتن همه سنجاق‌ها' : 'Unpin all messages';
   String get noPinnedMessages =>

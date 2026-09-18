@@ -46,7 +46,7 @@ class ChatListTile extends StatelessWidget {
         subtitle = isFa ? 'پیام صوتی' : 'Voice message';
         subtitleIcon = Icons.mic_rounded;
       } else if (last.messageType == 'file') {
-        subtitle = last.originalName ?? (isFa ? 'فایل' : 'File');
+        subtitle = (last.content?.isNotEmpty == true ? last.content! : (isFa ? 'فایل' : 'File'));
         subtitleIcon = Icons.attach_file_rounded;
       } else {
         subtitle = last.content ?? '';
@@ -198,18 +198,6 @@ class ChatListTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        if (last?.isMine == true) ...[
-                          Icon(
-                            last!.status == 'read'
-                                ? Icons.done_all_rounded
-                                : Icons.done_rounded,
-                            size: 16,
-                            color: last.status == 'read'
-                                ? const Color(0xFF4FC3F7)
-                                : Colors.grey.shade400,
-                          ),
-                          const SizedBox(width: 4),
-                        ],
                         if (subtitleIcon != null) ...[
                           Icon(
                             subtitleIcon,
