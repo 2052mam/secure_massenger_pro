@@ -10,11 +10,20 @@ class PhotoViewerScreen extends StatefulWidget {
   final String? token;
   final String? caption;
 
+  /// Used by the offline vault (Item 5) so a saved photo can be re-downloaded
+  /// even when the server no longer has the original.
+  final String? mediaId;
+  final String? chatId;
+  final String? messageId;
+
   const PhotoViewerScreen({
     super.key,
     required this.url,
     this.token,
     this.caption,
+    this.mediaId,
+    this.chatId,
+    this.messageId,
   });
 
   @override
@@ -36,10 +45,13 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
     setState(() => _downloading = true);
     try {
       final filename = 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final path = await MediaDownloadService.downloadMedia(
+      await MediaDownloadService.downloadMedia(
         mediaUrl: widget.url,
         fileName: filename,
         token: widget.token,
+        mediaId: widget.mediaId,
+        chatId: widget.chatId,
+        messageId: widget.messageId,
       );
       if (mounted) {
         setState(() => _downloading = false);

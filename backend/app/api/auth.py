@@ -458,28 +458,64 @@ def register():
     }), 201
 
 
-@auth_bp.route('/request-phone-code', methods=['POST'])
-def request_phone_code():
-    """Start a phone-primary login without exposing whether a number exists."""
+def _is_registered_number(mobile_number: str) -> bool:
+    """True only for a fully registered, phone-verified, active account."""
+    user = User.query.filter_by(
+        mobile_number=mobile_number,
+        is_deleted=False,
+        is_active=True,
+    ).first()
+    return bool(user and user.mobile_verified_at)
+
+
+@auth_bp.route('/check-phone', methods=['POST'])
+def check_phone():
+    """Tell the login screen whether a number must register first.
+
+    Telegram sends the code only for numbers that already exist; a brand new
+    number is taken straight to the sign-up form. The client calls this before
+    requesting a code so no SMS is ever sent to an unregistered number.
+    """
     data = request.get_json(silent=True) or {}
     mobile_number = normalize_mobile_number(data.get('mobile_number'))
     if not mobile_number:
         return jsonify({'error': 'شماره موبایل نامعتبر است'}), 400
+    registered = _is_registered_number(mobile_number)
+    return jsonify({
+        'registered': registered,
+        'registration_required': not registered,
+        'mobile_number': mobile_number,
+        'masked_mobile_number': _mask_mobile(mobile_number),
+    }), 200
+
+
+@auth_bp.route('/request-phone-code', methods=['POST'])
+def request_phone_code():
+    """Start a phone-primary login for an existing account.
+
+    A number that has never completed registration is NOT sent a code: the
+    response asks the client to open the registration screen instead, exactly
+    like Telegram's "create a new account" step.
+    """
+    data = request.get_json(silent=True) or {}
+    mobile_number = normalize_mobile_number(data.get('mobile_number'))
+    if not mobile_number:
+        return jsonify({'error': 'شماره موبایل نامعتبر است'}), 400
+
+    if not _is_registered_number(mobile_number):
+        return jsonify({
+            'registration_required': True,
+            'registered': False,
+            'message': 'این شماره هنوز ثبت‌نام نکرده است. لطفاً ابتدا ثبت‌نام کنید.',
+            'mobile_number': mobile_number,
+            'masked_mobile_number': _mask_mobile(mobile_number),
+        }), 200
 
     user = User.query.filter_by(
         mobile_number=mobile_number,
         is_deleted=False,
         is_active=True,
     ).first()
-    # Always return the same accepted response for an unknown number. This
-    # avoids turning the endpoint into an account-enumeration oracle.
-    if not user or not user.mobile_verified_at:
-        return jsonify({
-            'message': 'اگر این شماره ثبت شده باشد، کد تأیید ارسال می‌شود.',
-            'verification_id': str(uuid.uuid4()),
-            'mobile_number': _mask_mobile(mobile_number),
-            'expires_in_seconds': int(current_app.config['PHONE_CODE_TTL_SECONDS']),
-        }), 202
 
     try:
         challenge = _issue_phone_code(user, PHONE_CODE_PURPOSE_LOGIN)
@@ -494,7 +530,9 @@ def request_phone_code():
         return jsonify({'error': 'ارسال پیامک تأیید موقتاً ممکن نیست. دوباره تلاش کنید.'}), 503
 
     return jsonify({
-        'message': 'اگر این شماره ثبت شده باشد، کد تأیید ارسال می‌شود.',
+        'registration_required': False,
+        'registered': True,
+        'message': 'کد تأیید ارسال شد.',
         'verification_id': challenge.id,
         'mobile_number': _mask_mobile(mobile_number),
         'expires_in_seconds': int(current_app.config['PHONE_CODE_TTL_SECONDS']),

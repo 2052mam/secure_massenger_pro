@@ -42,6 +42,7 @@ void main() {
             return jsonResponse({
               'verification_id': 'phone-challenge',
               'mobile_number': '+989••••567',
+              'registration_required': false,
             }, status: 202);
           }
           if (path.endsWith('/auth/verify-phone')) {
@@ -98,7 +99,7 @@ void main() {
           expect((await AccountService.list()).single.userId, 'alice');
 
           await tester.enterText(find.byType(TextFormField).single, '+989121234567');
-          await tester.tap(find.text('ارسال کد ورود'));
+          await tester.tap(find.text('ادامه'));
           await tester.pumpAndSettle();
           expect(find.byType(PhoneVerificationScreen), findsOneWidget);
           await tester.enterText(find.byType(TextField).single, '123456');

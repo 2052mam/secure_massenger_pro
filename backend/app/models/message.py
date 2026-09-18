@@ -55,6 +55,10 @@ class Message(db.Model):
     audio_artist = db.Column(db.String(200), nullable=True)
     audio_duration = db.Column(db.Float, nullable=True)
 
+    # --- Polls & quizzes (Telegram parity) ---
+    # Set for message_type == 'poll'; the poll row owns question/options/votes.
+    poll_id = db.Column(db.String(36), db.ForeignKey('polls.id'), nullable=True, index=True)
+
     # --- Video editor: muted videos play silently on every client ---
     is_muted = db.Column(db.Boolean, default=False, nullable=False, server_default=db.false())
     

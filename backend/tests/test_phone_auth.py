@@ -75,7 +75,7 @@ def test_phone_registration_sends_code_activates_account_and_creates_session(app
         assert delivered[-1][1] not in challenge.code_hash
 
 
-def test_phone_login_is_primary_and_unknown_numbers_are_not_enumerated(app, client):
+def test_phone_login_is_primary_and_unknown_numbers_go_to_registration(app, client):
     delivered = []
     app.config['SMS_SENDER'] = lambda mobile, code: delivered.append((mobile, code))
     registration = register(client)
@@ -92,8 +92,12 @@ def test_phone_login_is_primary_and_unknown_numbers_are_not_enumerated(app, clie
     unknown = client.post('/api/v1/auth/request-phone-code', json={
         'mobile_number': '+989121234568',
     })
-    assert known.status_code == unknown.status_code == 202
-    assert known.json['message'] == unknown.json['message']
+    assert known.status_code == 202
+    assert known.json['registration_required'] is False
+    # An unregistered number is never sent a code; it must register first.
+    assert unknown.status_code == 200
+    assert unknown.json['registration_required'] is True
+    assert 'verification_id' not in unknown.json
     assert len(delivered) == 2  # Unknown number was not sent an SMS.
 
     signed_in = client.post('/api/v1/auth/verify-phone', json={
@@ -105,11 +109,53 @@ def test_phone_login_is_primary_and_unknown_numbers_are_not_enumerated(app, clie
     assert signed_in.json['user']['id'] == verified.json['user']['id']
 
     fake = client.post('/api/v1/auth/verify-phone', json={
-        'verification_id': unknown.json['verification_id'],
+        'verification_id': 'not-a-real-challenge',
         'code': '000000',
         'device_info': device(),
     })
     assert fake.status_code == 401
+
+
+def test_check_phone_tells_the_login_screen_to_open_registration(app, client):
+    delivered = []
+    app.config['SMS_SENDER'] = lambda mobile, code: delivered.append((mobile, code))
+    registration = register(client)
+    client.post('/api/v1/auth/verify-phone', json={
+        'verification_id': registration.json['verification_id'],
+        'code': delivered[-1][1],
+        'device_info': device(),
+    })
+
+    existing = client.post('/api/v1/auth/check-phone', json={
+        'mobile_number': '09121234567',
+    })
+    assert existing.status_code == 200
+    assert existing.json['registered'] is True
+    assert existing.json['registration_required'] is False
+
+    fresh = client.post('/api/v1/auth/check-phone', json={
+        'mobile_number': '09129999999',
+    })
+    assert fresh.status_code == 200
+    assert fresh.json['registration_required'] is True
+    # Checking a number must never trigger an SMS.
+    assert len(delivered) == 1
+
+    assert client.post('/api/v1/auth/check-phone', json={
+        'mobile_number': 'not-a-number',
+    }).status_code == 400
+
+
+def test_unverified_registration_still_requires_registration_to_login(app, client):
+    delivered = []
+    app.config['SMS_SENDER'] = lambda mobile, code: delivered.append((mobile, code))
+    assert register(client).status_code == 201  # never verified
+    requested = client.post('/api/v1/auth/request-phone-code', json={
+        'mobile_number': '09121234567',
+    })
+    assert requested.status_code == 200
+    assert requested.json['registration_required'] is True
+    assert len(delivered) == 1
 
 
 def test_resend_invalidates_the_previous_sms_code(app, client):

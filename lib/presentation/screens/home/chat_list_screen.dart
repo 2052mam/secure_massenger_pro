@@ -11,6 +11,7 @@ import '../../providers/chat_list_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/locale_provider.dart';
 import '../../../data/models/chat_folder_model.dart';
+import '../../../core/utils/chat_search.dart';
 import '../../../data/models/chat_model.dart';
 import '../../../data/services/api_service.dart';
 import '../chat/chat_screen.dart';
@@ -34,6 +35,27 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
   static const String _personalFolderId = '__personal__';
 
+  /// In-list search (Item 4). Empty means the normal folder view.
+  final TextEditingController _searchCtrl = TextEditingController();
+  bool _searching = false;
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _searching = !_searching;
+      if (!_searching) {
+        _searchCtrl.clear();
+        _query = '';
+      }
+    });
+  }
+
   ChatFolderModel? _selectedFolder(List<ChatFolderModel> folders) {
     final id = _selectedFolderId;
     if (id == null || id == _personalFolderId) return null;
@@ -48,6 +70,16 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     List<ChatFolderModel> folders, {
     List<ChatModel> archived = const [],
   }) {
+    // While searching, Telegram ignores the folder filter and looks through
+    // every conversation — including archived groups and channels.
+    if (_query.trim().isNotEmpty) {
+      final pool = <ChatModel>[...chats];
+      final seen = pool.map((chat) => chat.id).toSet();
+      for (final chat in archived) {
+        if (seen.add(chat.id)) pool.add(chat);
+      }
+      return filterChats(pool, _query);
+    }
     final id = _selectedFolderId;
     if (id == null) return chats;
     if (id == _personalFolderId) {
@@ -83,18 +115,40 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        title: Text(
-          isFa ? 'پیام‌رسان' : 'Messenger',
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 22),
-        ),
+        title: _searching
+            ? TextField(
+                key: const ValueKey('chat-list-search-field'),
+                controller: _searchCtrl,
+                autofocus: true,
+                textInputAction: TextInputAction.search,
+                onChanged: (value) => setState(() => _query = value),
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  hintText: isFa
+                      ? 'جستجو در چت‌ها، گروه‌ها و کانال‌ها...'
+                      : 'Search chats, groups and channels...',
+                ),
+              )
+            : Text(
+                isFa ? 'پیام‌رسان' : 'Messenger',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 22),
+              ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search_rounded),
-            onPressed: () {
-              ref.read(shellIndexProvider.notifier).state = 1;
-            },
+            key: const ValueKey('chat-list-search'),
+            icon: Icon(_searching ? Icons.close_rounded : Icons.search_rounded),
+            onPressed: _toggleSearch,
             tooltip: isFa ? 'جستجو' : 'Search',
           ),
+          if (!_searching)
+            IconButton(
+              key: const ValueKey('global-search'),
+              icon: const Icon(Icons.travel_explore_rounded),
+              onPressed: () {
+                ref.read(shellIndexProvider.notifier).state = 1;
+              },
+              tooltip: isFa ? 'جستجوی سراسری' : 'Global search',
+            ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (v) => _onMenu(v, isFa),
@@ -123,7 +177,9 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             ],
           ),
         ],
-        bottom: PreferredSize(
+        bottom: _searching
+            ? null
+            : PreferredSize(
           preferredSize: const Size.fromHeight(46),
           child: _FolderBar(
             folders: folders,
@@ -139,7 +195,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         child: chatsAsync.when(
           data: (data) {
             final folder = _selectedFolder(folders);
-            final archived = folder?.includeArchived == true
+            final searching = _query.trim().isNotEmpty;
+            final archived = (folder?.includeArchived == true || searching)
                 ? (ref.watch(archivedChatListProvider).valueOrNull?.chats ??
                       const <ChatModel>[])
                 : const <ChatModel>[];
@@ -150,19 +207,21 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             );
             // The archive row lives on top of the "All" folder, like Telegram.
             final showArchiveRow =
-                _selectedFolderId == null && data.hasArchive;
+                !searching && _selectedFolderId == null && data.hasArchive;
             if (chats.isEmpty && !showArchiveRow) {
               return _EmptyState(
                 isFa: isFa,
                 inFolder: _selectedFolderId != null,
+                searching: searching,
               );
             }
             final itemCount = chats.length + (showArchiveRow ? 1 : 0);
             return Column(
               children: [
-                const _DeviceLoginBanner(),
-                const StoryBar(),
-                if (_selectedFolderId == null) const _SponsoredStrip(),
+                if (!searching) const _DeviceLoginBanner(),
+                if (!searching) const StoryBar(),
+                if (!searching && _selectedFolderId == null)
+                  const _SponsoredStrip(),
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: () => ref.read(chatListProvider.notifier).refresh(),
@@ -568,10 +627,15 @@ class _SponsoredStripState extends State<_SponsoredStrip> {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.isFa, required this.inFolder});
+  const _EmptyState({
+    required this.isFa,
+    required this.inFolder,
+    this.searching = false,
+  });
 
   final bool isFa;
   final bool inFolder;
+  final bool searching;
 
   @override
   Widget build(BuildContext context) {
@@ -581,24 +645,32 @@ class _EmptyState extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            inFolder
-                ? Icons.folder_open_rounded
-                : Icons.chat_bubble_outline_rounded,
+            searching
+                ? Icons.search_off_rounded
+                : inFolder
+                    ? Icons.folder_open_rounded
+                    : Icons.chat_bubble_outline_rounded,
             size: 72,
             color: Colors.grey[400],
           ),
           const SizedBox(height: 16),
           Text(
-            inFolder
-                ? labels.folderEmpty
-                : (isFa ? 'هنوز گفتگویی ندارید' : 'No conversations yet'),
+            searching
+                ? (isFa ? 'چتی پیدا نشد' : 'No chats found')
+                : inFolder
+                    ? labels.folderEmpty
+                    : (isFa ? 'هنوز گفتگویی ندارید' : 'No conversations yet'),
             style: TextStyle(color: Colors.grey[600], fontSize: 16),
           ),
           const SizedBox(height: 8),
           Text(
-            isFa
-                ? 'از تب جستجو کاربر پیدا کنید'
-                : 'Find users from the Search tab',
+            searching
+                ? (isFa
+                      ? 'جستجوی سراسری را برای یافتن کاربر یا کانال جدید امتحان کنید'
+                      : 'Try global search to find new users or channels')
+                : isFa
+                    ? 'از تب جستجو کاربر پیدا کنید'
+                    : 'Find users from the Search tab',
             style: TextStyle(color: Colors.grey[500], fontSize: 13),
           ),
         ],

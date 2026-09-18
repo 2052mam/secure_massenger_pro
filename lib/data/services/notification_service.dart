@@ -343,6 +343,9 @@ class NotificationService {
   /// User-facing one-line preview, mirroring the server's wording.
   static String previewFor({String? messageType, String? content}) {
     final text = content?.trim() ?? '';
+    if (messageType == 'poll') {
+      return text.isNotEmpty ? '📊 $text' : '📊 نظرسنجی';
+    }
     if (text.isNotEmpty && messageType != 'location') return _truncate(text);
     switch (messageType) {
       case 'image':

@@ -426,21 +426,46 @@ def search_users():
         if not blocked:
             result_users.append(u.to_dict())
 
-    from app.models.chat import Chat
-    chats = Chat.query.filter(
+    from app.models.chat import Chat, ChatMember
+    # Telegram searches the chats you are already in (groups AND channels)
+    # as well as public channels/groups you could join. Only returning public
+    # channels used to hide every group the user is a member of.
+    joined_ids = {
+        row.chat_id for row in ChatMember.query.filter_by(
+            user_id=current_id, is_deleted=False,
+        ).with_entities(ChatMember.chat_id).all()
+    }
+    title_match = Chat.title.ilike(f'%{q}%') | Chat.username.ilike(f'%{q}%')
+
+    joined_chats = Chat.query.filter(
         Chat.is_deleted == False,
+        Chat.is_deleted_for_all == False,
+        Chat.id.in_(joined_ids or {''}),
+        Chat.chat_type.in_(('group', 'channel')),
+        title_match,
+    ).limit(50).all() if joined_ids else []
+
+    public_chats = Chat.query.filter(
+        Chat.is_deleted == False,
+        Chat.is_deleted_for_all == False,
         Chat.is_public == True,
-        Chat.chat_type == 'channel',
-        (Chat.title.ilike(f'%{q}%') | Chat.username.ilike(f'%{q}%'))
+        Chat.chat_type.in_(('group', 'channel')),
+        ~Chat.id.in_(joined_ids or {''}),
+        title_match,
     ).limit(20).all()
 
-    result_chats = [{
-        'id': c.id,
-        'chat_type': c.chat_type,
-        'title': c.title,
-        'username': c.username,
-        'avatar_url': c.avatar_url,
-    } for c in chats]
+    def _chat_payload(chat, joined):
+        return {
+            'id': chat.id,
+            'chat_type': chat.chat_type,
+            'title': chat.title,
+            'username': chat.username,
+            'avatar_url': chat.avatar_url,
+            'is_member': joined,
+        }
+
+    result_chats = [_chat_payload(c, True) for c in joined_chats]
+    result_chats += [_chat_payload(c, False) for c in public_chats]
 
     return jsonify({'users': result_users, 'chats': result_chats}), 200
 

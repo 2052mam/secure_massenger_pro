@@ -63,6 +63,8 @@ def upgrade_schema():
             'is_muted': 'BOOLEAN NOT NULL DEFAULT 0',
             'view_duration': 'INTEGER NULL',
             'view_expires_at': 'DATETIME NULL',
+            # Polls & quizzes (Telegram parity).
+            'poll_id': 'VARCHAR(36) NULL',
         },
         'user_devices': {
             'push_token': 'VARCHAR(512) NULL',
@@ -108,6 +110,7 @@ def upgrade_schema():
     from app.models.message import MessageReaction  # ensure exists
     from app.models.story import Story, StoryView  # noqa: F401
     from app.models.user import PhoneVerification  # noqa: F401
+    from app.models.poll import Poll, PollOption, PollVote  # noqa: F401
 
     db.metadata.create_all(bind=db.engine)
     # Also ensure specific tables exist individually for older SQLAlchemy metadata
@@ -117,4 +120,5 @@ def upgrade_schema():
         Report.__table__, StickerPack.__table__, Sticker.__table__, SavedGif.__table__,
         MessageReaction.__table__,
         Story.__table__, StoryView.__table__, PhoneVerification.__table__,
+        Poll.__table__, PollOption.__table__, PollVote.__table__,
     ])

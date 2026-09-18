@@ -59,6 +59,13 @@ def can_forward_message(message, viewer_id=None):
     return True, None
 
 
+def _poll_payload(poll, user_id):
+    if poll is None or poll.is_deleted:
+        return None
+    from app.models.poll import serialize_poll
+    return serialize_poll(poll, user_id)
+
+
 def serialize_messages(messages, user_id, status_override=None):
     if not messages:
         return []
@@ -84,6 +91,14 @@ def serialize_messages(messages, user_id, status_override=None):
             statuses.setdefault(status.message_id, []).append(status)
 
     chats = {c.id: c for c in Chat.query.filter(Chat.id.in_({m.chat_id for m in messages})).all()}
+    # Telegram-style polls travel inside their message payload so the history,
+    # polling and notification paths need no extra round trip.
+    poll_ids = {getattr(m, 'poll_id', None) for m in messages}
+    poll_ids.discard(None)
+    polls = {}
+    if poll_ids:
+        from app.models.poll import Poll
+        polls = {p.id: p for p in Poll.query.filter(Poll.id.in_(poll_ids)).all()}
     # One batched lookup keeps the pinned flag free of N+1 queries.
     pinned_ids = {row.message_id for row in PinnedMessage.query.filter(
         PinnedMessage.message_id.in_([m.id for m in messages]),
@@ -208,6 +223,9 @@ def serialize_messages(messages, user_id, status_override=None):
             'audio_duration': getattr(msg, 'audio_duration', None),
             # Video editor mute flag
             'is_muted': bool(getattr(msg, 'is_muted', False)),
+            # Polls & quizzes
+            'poll_id': getattr(msg, 'poll_id', None),
+            'poll': _poll_payload(polls.get(getattr(msg, 'poll_id', None)), user_id),
             'created_at': utc_iso(msg.created_at),
             'status': status,
             'reactions': reactions_summary,

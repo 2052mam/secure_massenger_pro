@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/utils/media_utils.dart';
 import '../../../data/models/user_photo_model.dart';
+import '../../../data/services/media_download_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/chat/chat_labels.dart';
 import '../../widgets/media/photo_canvas.dart';
@@ -41,6 +42,7 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
   bool _loading = true;
   bool _busy = false;
   int _index = 0;
+  bool _downloading = false;
   String? _error;
 
   bool get _isSelf => widget.userId == null;
@@ -128,6 +130,43 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
     await ref.read(authNotifierProvider.notifier).checkSession();
   });
 
+  /// Item 3: anyone can save another person's profile photo, exactly like
+  /// Telegram's "Save to gallery" action in the profile photo viewer.
+  Future<void> _downloadCurrent(List<String> urls) async {
+    if (_downloading || urls.isEmpty) return;
+    final safeIndex = _index < 0 || _index >= urls.length ? 0 : _index;
+    final url = urls[safeIndex];
+    final mediaId = _index < _photos.length ? _photos[safeIndex].mediaId : null;
+    setState(() => _downloading = true);
+    try {
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'profile_photo_$stamp.jpg';
+      final path = await MediaDownloadService.downloadMedia(
+        mediaUrl: resolveMediaUrl(null, existingUrl: url),
+        fileName: fileName,
+        token: ref.read(authenticatedSessionProvider).token,
+        mediaId: mediaId,
+      );
+      if (!mounted) return;
+      setState(() => _downloading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            path == null
+                ? 'عکس پروفایل ذخیره شد'
+                : 'عکس پروفایل ذخیره شد: $fileName',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _downloading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ذخیره عکس ناموفق بود: $error')),
+      );
+    }
+  }
+
   ImageProvider _provider(String url) {
     final token = ref.read(authenticatedSessionProvider).token;
     return CachedNetworkImageProvider(
@@ -155,6 +194,22 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
               : (widget.title ?? labels.profilePhotos),
         ),
         actions: [
+          if (urls.isNotEmpty)
+            IconButton(
+              key: const ValueKey('download-profile-photo'),
+              tooltip: 'ذخیره عکس پروفایل',
+              icon: _downloading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.download_rounded),
+              onPressed: _downloading ? null : () => _downloadCurrent(urls),
+            ),
           if (canManage)
             IconButton(
               key: const ValueKey('add-profile-photo'),

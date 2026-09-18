@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/user_model.dart';
+import '../../../core/utils/media_utils.dart';
 import '../../../data/services/api_service.dart';
+import '../../../data/services/media_download_service.dart';
 import '../../providers/locale_provider.dart';
 import '../../../data/services/storage_service.dart';
 import '../../widgets/chat/chat_avatar.dart';
@@ -93,6 +95,38 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   }
 
   bool _isBlocked = false;
+  bool _savingPhoto = false;
+
+  /// Item 3: save this person's profile picture straight from their profile.
+  Future<void> _downloadProfilePhoto() async {
+    final user = _user;
+    final url = user?.avatarUrl;
+    if (_savingPhoto || user == null || !user.showProfilePhoto ||
+        url == null || url.isEmpty) {
+      return;
+    }
+    setState(() => _savingPhoto = true);
+    try {
+      final fileName =
+          'profile_${user.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      await MediaDownloadService.downloadMedia(
+        mediaUrl: resolveMediaUrl(null, existingUrl: url),
+        fileName: fileName,
+        token: StorageService.getToken(),
+      );
+      if (!mounted) return;
+      setState(() => _savingPhoto = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('عکس پروفایل ذخیره شد: $fileName')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _savingPhoto = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ذخیره عکس ناموفق بود: $error')),
+      );
+    }
+  }
 
   Future<void> _checkBlocked() async {
     try {
@@ -126,7 +160,25 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     final isFa = ref.watch(localeProvider).languageCode == 'fa';
 
     return Scaffold(
-      appBar: AppBar(title: Text(isFa ? 'پروفایل' : 'Profile')),
+      appBar: AppBar(
+        title: Text(isFa ? 'پروفایل' : 'Profile'),
+        actions: [
+          if (_user?.showProfilePhoto == true &&
+              (_user?.avatarUrl?.isNotEmpty ?? false))
+            IconButton(
+              key: const ValueKey('save-profile-photo'),
+              tooltip: isFa ? 'ذخیره عکس پروفایل' : 'Save profile photo',
+              icon: _savingPhoto
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.download_rounded),
+              onPressed: _savingPhoto ? null : _downloadProfilePhoto,
+            ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null

@@ -12,11 +12,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 
 import '../../../data/models/message_model.dart';
+import '../../../data/models/poll_model.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/models/chat_invite_model.dart';
 import '../../../data/services/message_reconciler.dart';
 import '../../../core/utils/chat_invite_link.dart';
 import '../../../data/models/reply_preview_model.dart';
+import '../../../data/services/media_cache_service.dart';
 import '../../../data/services/media_playback_coordinator.dart';
 import '../../../core/utils/media_utils.dart';
 import '../../../data/services/api_service.dart';
@@ -43,6 +45,7 @@ import '../../../data/services/encryption_service.dart';
 import '../../widgets/media/video_note_player.dart';
 import '../../widgets/music/mini_music_player.dart';
 import 'pinned_messages_screen.dart';
+import 'create_poll_screen.dart';
 import 'location_picker_screen.dart';
 import 'secure_chat_screen.dart';
 import 'photo_editor_screen.dart';
@@ -128,6 +131,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   int _slowModeDelay = 0;
   int _slowModeRemaining = 0;
   Timer? _slowModeTimer;
+  // Poll id whose vote/close request is currently in flight.
+  String? _pollBusyId;
   // True while this chat has an ongoing (non-erased) secure conversation.
   bool _hasSecureSession = false;
   // Live location: id of the message currently being broadcast + its ticker.
@@ -888,6 +893,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
+  /// Upload a file and immediately keep a local copy (Item 5).
+  ///
+  /// The sender's device always retains what it sent, so the content survives
+  /// a total loss of server data and can still be viewed, saved, resent or
+  /// forwarded from the chat history.
+  Future<Map<String, dynamic>> _uploadAndCache(
+    File file, {
+    Map<String, String>? fields,
+    String? fileName,
+  }) async {
+    final upload = await _api.uploadFile('/media/upload', file, fields: fields);
+    final mediaId = upload['id'] as String?;
+    if (mediaId != null && mediaId.isNotEmpty) {
+      unawaited(
+        MediaCacheService.instance.storeOutgoing(
+          mediaId: mediaId,
+          source: file,
+          fileName: fileName ?? upload['original_name'] as String?,
+          chatId: widget.chatId,
+          mediaType: upload['media_type'] as String?,
+        ),
+      );
+    }
+    return upload;
+  }
+
   Future<void> _pickAndSendFile() async {
     if (_sending || !_can('send_files')) return;
     final result = await FilePicker.platform.pickFiles();
@@ -900,7 +931,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     bool sendSpoiler = _isSpoiler;
     setState(() => _sending = true);
     try {
-      final upload = await _api.uploadFile('/media/upload', file);
+      final upload = await _uploadAndCache(file, fileName: fileName);
       final mediaId = upload['id'] as String;
       final body = <String, dynamic>{
         'chat_id': widget.chatId,
@@ -1083,7 +1114,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final reply = _replyTo;
     setState(() => _sending = true);
     try {
-      final upload = await _api.uploadFile('/media/upload', sendFile, fields: trimFields);
+      final upload = await _uploadAndCache(sendFile, fields: trimFields);
       final mediaId = upload['id'] as String;
       final mediaType =
           upload['media_type'] as String? ?? (isVideo ? 'video' : 'image');
@@ -1146,7 +1177,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       final reply = _replyTo;
       setState(() => _sending = true);
       try {
-        final upload = await _api.uploadFile('/media/upload', file);
+        final upload = await _uploadAndCache(file);
         final mediaId = upload['id'] as String;
         final body = <String, dynamic>{
           'chat_id': widget.chatId,
@@ -1380,7 +1411,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     if (video == null || !mounted) return;
     setState(() => _sending = true);
     try {
-      final upload = await _api.uploadFile('/media/upload', File(video.path));
+      final upload = await _uploadAndCache(File(video.path));
       final mediaId = upload['id'] as String?;
       if (mediaId == null || mediaId.isEmpty) throw Exception('آپلود ویدیو ناموفق بود');
       // /gifs/make returns {ok:true, media_id, gif_url} – not {gif:{}}
@@ -1442,7 +1473,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final reply = _replyTo;
     setState(() => _sending = true);
     try {
-      final upload = await _api.uploadFile('/media/upload', file);
+      final upload = await _uploadAndCache(file);
       final mediaId = upload['id'] as String;
       final body = <String, dynamic>{
         'chat_id': widget.chatId,
@@ -1606,6 +1637,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           url: _mediaFullUrl(message.mediaId, existingUrl: message.mediaUrl),
           token: _authToken,
           caption: message.content,
+          mediaId: message.mediaId,
+          chatId: message.chatId,
+          messageId: message.id,
         ),
       );
       _photoRoute = route;
@@ -1808,7 +1842,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final reply = _replyTo;
     setState(() => _sending = true);
     try {
-      final upload = await _api.uploadFile('/media/upload', file);
+      final upload = await _uploadAndCache(file);
       final mediaId = upload['id'] as String;
       final body = <String, dynamic>{
         'chat_id': widget.chatId,
@@ -2023,6 +2057,165 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _checkSecureSession();
   }
 
+  /// Telegram-style poll / quiz composer. The created poll comes back as a
+  /// normal message payload and is merged into the history immediately.
+  Future<void> _createPoll({bool quiz = false}) async {
+    if (_sending || !_can('send_messages')) return;
+    final reply = _replyTo;
+    final created = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => CreatePollScreen(
+          chatId: widget.chatId,
+          api: _api,
+          quiz: quiz,
+          replyToId: reply?.id,
+        ),
+      ),
+    );
+    if (created == null || !mounted) return;
+    setState(() {
+      _mergeMessages([MessageModel.fromJson(created)]);
+      _replyTo = null;
+    });
+    if (_historyMode) await _loadMessages();
+    _scrollToBottom();
+    if (mounted) ref.read(chatListProvider.notifier).refresh();
+  }
+
+  /// Replace a poll message in place with the server's fresh tally.
+  void _applyPollResult(MessageModel message, Map<String, dynamic> payload) {
+    if (!mounted) return;
+    final index = _messages.indexWhere((m) => m.id == message.id);
+    if (index < 0) return;
+    setState(() {
+      _messages[index] = _messages[index].copyWith(
+        poll: PollModel.fromJson(payload),
+      );
+      _pollBusyId = null;
+    });
+  }
+
+  Future<void> _runPollAction(
+    MessageModel message,
+    Future<Map<String, dynamic>> Function() action,
+  ) async {
+    final poll = message.poll;
+    if (poll == null || _pollBusyId != null) return;
+    setState(() => _pollBusyId = poll.id);
+    try {
+      _applyPollResult(message, await action());
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _pollBusyId = null);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> _votePoll(MessageModel message, String optionId) {
+    final poll = message.poll!;
+    // Multiple-answer polls send the full selection, like Telegram does.
+    final selection = poll.allowsMultipleAnswers
+        ? (poll.myOptionIds.contains(optionId)
+            ? (poll.myOptionIds.where((id) => id != optionId).toList())
+            : [...poll.myOptionIds, optionId])
+        : [optionId];
+    if (poll.allowsMultipleAnswers && selection.isEmpty) {
+      return _runPollAction(
+        message,
+        () => _api.post('/polls/${poll.id}/retract', {}),
+      );
+    }
+    return _runPollAction(
+      message,
+      () => _api.post('/polls/${poll.id}/vote', {'option_ids': selection}),
+    );
+  }
+
+  Future<void> _retractPoll(MessageModel message) => _runPollAction(
+        message,
+        () => _api.post('/polls/${message.poll!.id}/retract', {}),
+      );
+
+  Future<void> _closePoll(MessageModel message) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('بستن نظرسنجی'),
+        content: const Text(
+          'بعد از بستن، دیگر کسی نمی‌تواند رأی بدهد. ادامه می‌دهید؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('لغو'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('بستن'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _runPollAction(
+      message,
+      () => _api.post('/polls/${message.poll!.id}/close', {}),
+    );
+  }
+
+  Future<void> _showPollVoters(MessageModel message) async {
+    final poll = message.poll;
+    if (poll == null) return;
+    try {
+      final result = await _api.get('/polls/${poll.id}/voters');
+      if (!mounted) return;
+      final options = (result['options'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (ctx) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              ListTile(
+                title: Text(
+                  poll.question,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              for (final option in options) ...[
+                const Divider(height: 1),
+                ListTile(
+                  dense: true,
+                  title: Text(option['text'] as String? ?? ''),
+                  trailing: Text(
+                    '${(option['voters'] as List? ?? const []).length}',
+                  ),
+                ),
+                for (final voter in (option['voters'] as List? ?? const [])
+                    .whereType<Map<String, dynamic>>())
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.person_outline, size: 18),
+                    title: Text(voter['display_name'] as String? ?? ''),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
   void _showAttachMenu() {
     showModalBottomSheet(
       context: context,
@@ -2106,6 +2299,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                         _pickAndSendMusic();
                       },
                     ),
+                  ListTile(
+                    key: const ValueKey('attach-poll'),
+                    leading: const Icon(Icons.poll_outlined, color: Colors.indigo),
+                    title: const Text('نظرسنجی'),
+                    subtitle: const Text('سؤال با چند گزینه، مثل تلگرام', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _createPoll();
+                    },
+                  ),
+                  ListTile(
+                    key: const ValueKey('attach-quiz'),
+                    leading: const Icon(Icons.quiz_outlined, color: Colors.deepPurple),
+                    title: const Text('آزمون (چهارگزینه‌ای)'),
+                    subtitle: const Text('یک گزینه صحیح دارد و نتیجه اعلام می‌شود', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _createPoll(quiz: true);
+                    },
+                  ),
                   ListTile(
                     leading: const Icon(Icons.location_on_outlined, color: Colors.green),
                     title: const Text('موقعیت مکانی'),
@@ -2705,6 +2918,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                               token: _authToken,
                               onReactionTap: (emoji) => _toggleReaction(msg, emoji),
                               onAddReaction: () => _showReactionPicker(msg),
+                              pollBusy: msg.poll != null &&
+                                  _pollBusyId == msg.poll!.id,
+                              onPollVote: (optionId) => _votePoll(msg, optionId),
+                              onPollRetract: () => _retractPoll(msg),
+                              onPollClose: () => _closePoll(msg),
+                              onPollShowVoters: () => _showPollVoters(msg),
                             ),
                           );
                         },

@@ -17,6 +17,7 @@ import 'reply_preview.dart';
 import 'message_text.dart';
 import 'spoiler_widget.dart';
 import 'file_message_bubble.dart';
+import 'poll_bubble.dart';
 
 class MessageBubble extends StatelessWidget {
   final MessageModel message;
@@ -37,6 +38,12 @@ class MessageBubble extends StatelessWidget {
   final ValueChanged<String>? onMentionTap;
   final List<MessageModel> musicQueue;
   final String chatTitle;
+  // Polls & quizzes (Telegram parity).
+  final ValueChanged<String>? onPollVote;
+  final VoidCallback? onPollRetract;
+  final VoidCallback? onPollClose;
+  final VoidCallback? onPollShowVoters;
+  final bool pollBusy;
 
   const MessageBubble({
     super.key,
@@ -58,6 +65,11 @@ class MessageBubble extends StatelessWidget {
     this.onMentionTap,
     this.musicQueue = const [],
     this.chatTitle = '',
+    this.onPollVote,
+    this.onPollRetract,
+    this.onPollClose,
+    this.onPollShowVoters,
+    this.pollBusy = false,
   });
 
   @override
@@ -181,6 +193,17 @@ class MessageBubble extends StatelessWidget {
                 onInviteTap: onInviteTap,
                 onMentionTap: onMentionTap,
                 onOpenPhoto: onOpenPhoto,
+              )
+            else if (message.isPoll)
+              PollBubble(
+                poll: message.poll!,
+                isMine: isMine,
+                foreground: fg,
+                busy: pollBusy,
+                onVote: onPollVote,
+                onRetract: onPollRetract,
+                onClose: onPollClose,
+                onShowVoters: onPollShowVoters,
               )
             else if (message.isLocation)
               LocationBubble(message: message, isMine: isMine)
