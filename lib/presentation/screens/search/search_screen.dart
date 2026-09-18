@@ -148,17 +148,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     try {
       final chatId = ch['id'] as String;
       final title = ch['title'] as String? ?? '';
-      // Only open after the server confirms membership; an access error is
-      // not evidence that we were already a member.
-      await ApiService().post('/chats/$chatId/add-member', {
-        'user_id': (await ApiService().get('/users/me'))['id'],
-      });
+      final chatType = ch['chat_type'] as String? ?? 'channel';
+      // Chats we already belong to (groups included) open straight away; only
+      // public suggestions we are not a member of need a join request.
+      if (ch['is_member'] != true) {
+        // Only open after the server confirms membership; an access error is
+        // not evidence that we were already a member.
+        await ApiService().post('/chats/$chatId/add-member', {
+          'user_id': (await ApiService().get('/users/me'))['id'],
+        });
+      }
       await _remember(query: _ctrl.text.trim(), chatId: chatId);
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) =>
-              ChatScreen(chatId: chatId, title: title, chatType: 'channel'),
+              ChatScreen(chatId: chatId, title: title, chatType: chatType),
         ),
       );
     } catch (e) {
@@ -183,6 +188,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         'id': chat.id,
         'title': chat.title,
         'username': chat.username,
+        'chat_type': chat.chatType,
+        'is_member': true,
       });
       return;
     }
@@ -340,20 +347,32 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         vertical: 8,
                       ),
                       child: Text(
-                        isFa ? 'کانال‌ها' : 'Channels',
+                        isFa ? 'گروه‌ها و کانال‌ها' : 'Groups & Channels',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                     ..._channels.map(
                       (ch) => ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.campaign),
+                        leading: CircleAvatar(
+                          child: Icon(
+                            ch['chat_type'] == 'group'
+                                ? Icons.group
+                                : Icons.campaign,
+                          ),
                         ),
                         title: Text(ch['title'] ?? ''),
                         subtitle: ch['username'] != null
                             ? Text('@${ch['username']}')
                             : null,
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        trailing: ch['is_member'] == true
+                            ? const Icon(Icons.arrow_forward_ios, size: 16)
+                            : Text(
+                                isFa ? 'عضو شدن' : 'Join',
+                                style: TextStyle(
+                                  color: Theme.of(context).primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                         onTap: () => _joinChannel(ch),
                       ),
                     ),

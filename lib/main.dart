@@ -9,6 +9,7 @@ import 'app.dart';
 import 'core/theme/app_theme.dart';
 import 'data/services/background_poll_service.dart';
 import 'data/services/connection_service.dart';
+import 'data/services/media_cache_service.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/push_service.dart';
 import 'data/services/storage_service.dart';
@@ -23,6 +24,9 @@ Future<void> main() async {
 
   await Hive.initFlutter();
   await StorageService.init();
+  // Offline media vault: every photo/video/file this device sends or opens is
+  // kept locally so the chat history survives a total loss of server data.
+  await MediaCacheService.instance.init();
 
   // Local notifications work with zero push infrastructure (no FCM), so they
   // keep working under sanctions/filtering. The foreground poller notifies

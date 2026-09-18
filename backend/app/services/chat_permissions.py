@@ -75,6 +75,7 @@ def can_send(chat, user_id, message_type, view_once=False):
         'gif': 'send_messages',      # GIFs follow send_messages/photos
         'video_note': 'send_videos',
         'round_video': 'send_videos',
+        'poll': 'send_messages',      # polls/quizzes follow the text right
         'location': 'send_messages',  # locations follow text right
         'live_location': 'send_messages',
     }

@@ -281,6 +281,10 @@ def send_message():
     if not user_in_chat(user_id, chat_id):
         return jsonify({'error': 'دسترسی ندارید'}), 403
 
+    if message_type == 'poll':
+        # Polls are created through /api/v1/polls so question, options and
+        # votes are always validated and stored together.
+        return jsonify({'error': 'برای ساخت نظرسنجی از /polls استفاده کنید'}), 400
     if message_type not in ('text', 'image', 'video', 'voice', 'audio', 'music', 'file',
                             'sticker', 'gif', 'video_note', 'round_video',
                             'location', 'live_location'):
@@ -645,9 +649,36 @@ def forward_message(message_id):
             ((BlockList.blocked_id == user_id) & BlockList.blocker_id.in_(peers))).first():
             return jsonify({'error': 'Cannot forward to a blocked user'}), 403
 
+    # Telegram forwards a poll by copying it: the copy keeps the question and
+    # options but starts with a fresh, empty vote tally.
+    copied_poll_id = None
+    if original.message_type == 'poll' and original.poll_id:
+        from app.models.poll import Poll, PollOption
+        source_poll = db.session.get(Poll, original.poll_id)
+        if source_poll is None or source_poll.is_deleted:
+            return jsonify({'error': 'نظرسنجی در دسترس نیست'}), 400
+        copy = Poll(
+            chat_id=target_chat_id,
+            created_by=user_id,
+            question=source_poll.question,
+            poll_type=source_poll.poll_type,
+            is_anonymous=source_poll.is_anonymous,
+            allows_multiple_answers=source_poll.allows_multiple_answers,
+            explanation=source_poll.explanation,
+        )
+        db.session.add(copy)
+        db.session.flush()
+        for option in source_poll.options.all():
+            db.session.add(PollOption(
+                poll_id=copy.id, text=option.text,
+                position=option.position, is_correct=option.is_correct,
+            ))
+        copied_poll_id = copy.id
+
     new_msg = Message(
         chat_id=target_chat_id,
         sender_id=user_id,
+        poll_id=copied_poll_id,
         message_type=original.message_type,
         content=original.content,
         media_id=original.media_id,

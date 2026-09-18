@@ -56,6 +56,9 @@ class _FileMessageBubbleState extends State<FileMessageBubble> {
         mediaUrl: widget.mediaUrl,
         fileName: fileName,
         token: widget.token,
+        mediaId: widget.message.mediaId,
+        chatId: widget.message.chatId,
+        messageId: widget.message.id,
         onProgress: (received, total) {
           if (mounted && total > 0) {
             setState(() {

@@ -17,6 +17,7 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
+    get_jwt,
     get_jwt_identity,
     jwt_required,
 )
@@ -25,6 +26,18 @@ from sqlalchemy import func
 from app import db
 from app.models.audit import AuditLog
 from app.models.user import PhoneVerification, User, UserDevice, UserSession
+from app.services.code_delivery import (
+    DELIVERY_IN_APP,
+    DELIVERY_SMS,
+    choose_delivery_channel,
+    deliver_code_in_app,
+)
+from app.services.security_alerts import (
+    ensure_primary_device,
+    is_primary_device,
+    PRIMARY_REQUIRED_MESSAGE,
+    record_alert,
+)
 from app.services.sms_ir import SmsDeliveryError, send_verification_code
 
 
@@ -149,8 +162,24 @@ def _enforce_send_limit(mobile_number: str, purpose: str, ip_address: str | None
             raise AuthFlowError('تعداد درخواست کد از این اتصال بیش از حد مجاز است.', 429)
 
 
-def _issue_phone_code(user: User, purpose: str) -> PhoneVerification:
-    """Create and deliver exactly one valid challenge for a user/purpose."""
+def _issue_phone_code(
+    user: User,
+    purpose: str,
+    *,
+    device_label: str | None = None,
+    force_sms: bool = False,
+) -> tuple[PhoneVerification, str]:
+    """Create and deliver exactly one valid challenge for a user/purpose.
+
+    Delivery follows Telegram: an account that still has a live, recently used
+    session receives the code **inside the app** (Saved Messages, which every
+    signed-in device polls) and no SMS is sent. Only when there is nowhere to
+    deliver in-app — a fresh phone, a long-dormant account, registration — do
+    we fall back to SMS. If in-app delivery fails for any reason we still fall
+    back to SMS, so a user can never be locked out by this optimisation.
+
+    Returns the challenge and the channel actually used ('in_app' | 'sms').
+    """
     now = datetime.utcnow()
     ip_address = get_client_ip()
     _enforce_send_limit(user.mobile_number, purpose, ip_address)
@@ -178,9 +207,28 @@ def _issue_phone_code(user: User, purpose: str) -> PhoneVerification:
     db.session.add(challenge)
     db.session.flush()
 
-    # Send before committing the challenge. If SMS.ir is unavailable, the
-    # transaction rolls back and the user is never left with an unusable code.
-    send_verification_code(user.mobile_number, code)
+    # Registration always goes by SMS: the account has no trusted session yet.
+    channel = DELIVERY_SMS
+    if purpose == PHONE_CODE_PURPOSE_LOGIN and not force_sms:
+        channel = choose_delivery_channel(user.id)
+
+    delivered_in_app = False
+    if channel == DELIVERY_IN_APP:
+        try:
+            delivered_in_app = deliver_code_in_app(
+                user, code, ip_address=ip_address, device_label=device_label,
+            )
+        except Exception:
+            current_app.logger.exception(
+                'In-app code delivery failed; falling back to SMS.')
+            delivered_in_app = False
+    if not delivered_in_app:
+        channel = DELIVERY_SMS
+        # Send before committing the challenge. If SMS.ir is unavailable, the
+        # transaction rolls back and the user is never left with an unusable
+        # code.
+        send_verification_code(user.mobile_number, code)
+
     db.session.add(AuditLog(
         actor_id=user.id,
         action='phone_verification_sent',
@@ -188,8 +236,49 @@ def _issue_phone_code(user: User, purpose: str) -> PhoneVerification:
         entity_id=challenge.id,
         ip_address=ip_address,
         user_agent=request.headers.get('User-Agent'),
+        new_value=channel,
     ))
-    return challenge
+    # Point 3: the owner must learn about a login attempt immediately, even
+    # if the attempt never completes. This lands in the chat list banner on
+    # the next poll.
+    if purpose == PHONE_CODE_PURPOSE_LOGIN:
+        record_alert(
+            user.id,
+            'login_code_requested',
+            'درخواست کد ورود به حساب شما',
+            body=(
+                'کد ورود برای حساب شما درخواست شد'
+                + (f' از {device_label}' if device_label else '')
+                + '. اگر شما نبودید، فوراً تأیید دو مرحله‌ای را فعال کنید.'
+            ),
+            severity='warning',
+            ip_address=ip_address,
+            dedupe_seconds=60,
+        )
+    return challenge, channel
+
+
+def _device_label(device_info: dict) -> str | None:
+    """Short human label for the device asking for a code ("Pixel 7, Android 14")."""
+    parts = [
+        device_info.get('device_name'),
+        device_info.get('model'),
+        device_info.get('os'),
+    ]
+    label = '، '.join(str(p).strip() for p in parts if p and str(p).strip())
+    return label or None
+
+
+def _issue_phone_code_via_sms(
+    user: User, purpose: str,
+) -> tuple[PhoneVerification, str]:
+    """Force SMS delivery.
+
+    The verification screen offers "send by SMS instead" for the case where the
+    other device is lost, off, or the user simply cannot reach it. Without this
+    escape hatch, in-app delivery would be a lockout risk.
+    """
+    return _issue_phone_code(user, purpose, force_sms=True)
 
 
 def _register_or_update_device(user: User, device_info: dict) -> tuple[UserDevice, bool]:
@@ -328,14 +417,34 @@ def _create_authenticated_session(
         user_agent=request.headers.get('User-Agent'),
         device_fingerprint=device.device_fingerprint,
     ))
+    # Point 4: the first device ever to sign in owns the account.
+    became_primary = ensure_primary_device(user.id, device)
     if is_new_device:
         _add_new_device_warning(user, device, device_info)
+        # Point 3: an instant, structured alert the chat list can show on its
+        # very next poll, rather than only a Saved-Messages text.
+        record_alert(
+            user.id,
+            'new_device_login',
+            'ورود جدید به حساب شما',
+            body=(
+                f'دستگاه: {_device_label(device_info) or device.device_name or "ناشناس"}\n'
+                f'IP: {get_client_ip() or "نامشخص"}\n'
+                'اگر این شما نبودید، فوراً این دستگاه را حذف کنید.'
+            ),
+            severity='critical',
+            device=device,
+            ip_address=get_client_ip(),
+        )
 
     return {
         'access_token': access,
         'refresh_token': refresh,
         'user': user.to_dict(include_private=True),
         'new_device': is_new_device,
+        'device_id': device.id,
+        'is_primary_device': bool(device.is_primary),
+        'became_primary': became_primary and bool(device.is_primary),
     }
 
 
@@ -427,7 +536,8 @@ def register():
 
     try:
         db.session.flush()
-        challenge = _issue_phone_code(user, PHONE_CODE_PURPOSE_REGISTER)
+        challenge, delivery_channel = _issue_phone_code(
+            user, PHONE_CODE_PURPOSE_REGISTER)
         db.session.add(AuditLog(
             actor_id=user.id,
             action='user_register',
@@ -458,31 +568,69 @@ def register():
     }), 201
 
 
-@auth_bp.route('/request-phone-code', methods=['POST'])
-def request_phone_code():
-    """Start a phone-primary login without exposing whether a number exists."""
+def _is_registered_number(mobile_number: str) -> bool:
+    """True only for a fully registered, phone-verified, active account."""
+    user = User.query.filter_by(
+        mobile_number=mobile_number,
+        is_deleted=False,
+        is_active=True,
+    ).first()
+    return bool(user and user.mobile_verified_at)
+
+
+@auth_bp.route('/check-phone', methods=['POST'])
+def check_phone():
+    """Tell the login screen whether a number must register first.
+
+    Telegram sends the code only for numbers that already exist; a brand new
+    number is taken straight to the sign-up form. The client calls this before
+    requesting a code so no SMS is ever sent to an unregistered number.
+    """
     data = request.get_json(silent=True) or {}
     mobile_number = normalize_mobile_number(data.get('mobile_number'))
     if not mobile_number:
         return jsonify({'error': 'شماره موبایل نامعتبر است'}), 400
+    registered = _is_registered_number(mobile_number)
+    return jsonify({
+        'registered': registered,
+        'registration_required': not registered,
+        'mobile_number': mobile_number,
+        'masked_mobile_number': _mask_mobile(mobile_number),
+    }), 200
+
+
+@auth_bp.route('/request-phone-code', methods=['POST'])
+def request_phone_code():
+    """Start a phone-primary login for an existing account.
+
+    A number that has never completed registration is NOT sent a code: the
+    response asks the client to open the registration screen instead, exactly
+    like Telegram's "create a new account" step.
+    """
+    data = request.get_json(silent=True) or {}
+    mobile_number = normalize_mobile_number(data.get('mobile_number'))
+    if not mobile_number:
+        return jsonify({'error': 'شماره موبایل نامعتبر است'}), 400
+
+    if not _is_registered_number(mobile_number):
+        return jsonify({
+            'registration_required': True,
+            'registered': False,
+            'message': 'این شماره هنوز ثبت‌نام نکرده است. لطفاً ابتدا ثبت‌نام کنید.',
+            'mobile_number': mobile_number,
+            'masked_mobile_number': _mask_mobile(mobile_number),
+        }), 200
 
     user = User.query.filter_by(
         mobile_number=mobile_number,
         is_deleted=False,
         is_active=True,
     ).first()
-    # Always return the same accepted response for an unknown number. This
-    # avoids turning the endpoint into an account-enumeration oracle.
-    if not user or not user.mobile_verified_at:
-        return jsonify({
-            'message': 'اگر این شماره ثبت شده باشد، کد تأیید ارسال می‌شود.',
-            'verification_id': str(uuid.uuid4()),
-            'mobile_number': _mask_mobile(mobile_number),
-            'expires_in_seconds': int(current_app.config['PHONE_CODE_TTL_SECONDS']),
-        }), 202
 
+    device_label = _device_label(_as_device_info(data.get('device_info')))
     try:
-        challenge = _issue_phone_code(user, PHONE_CODE_PURPOSE_LOGIN)
+        challenge, delivery_channel = _issue_phone_code(
+            user, PHONE_CODE_PURPOSE_LOGIN, device_label=device_label)
         db.session.commit()
     except AuthFlowError as error:
         db.session.rollback()
@@ -493,11 +641,21 @@ def request_phone_code():
         # Do not disclose a valid account through a provider delivery failure.
         return jsonify({'error': 'ارسال پیامک تأیید موقتاً ممکن نیست. دوباره تلاش کنید.'}), 503
 
+    in_app = delivery_channel == DELIVERY_IN_APP
     return jsonify({
-        'message': 'اگر این شماره ثبت شده باشد، کد تأیید ارسال می‌شود.',
+        'registration_required': False,
+        'registered': True,
+        'message': (
+            'کد ورود به برنامه‌ی شما روی دستگاه دیگرتان ارسال شد.'
+            if in_app else 'کد تأیید پیامک شد.'
+        ),
         'verification_id': challenge.id,
         'mobile_number': _mask_mobile(mobile_number),
+        'delivery_channel': delivery_channel,
+        'sent_in_app': in_app,
         'expires_in_seconds': int(current_app.config['PHONE_CODE_TTL_SECONDS']),
+        'resend_after_seconds': int(
+            current_app.config['PHONE_CODE_RESEND_SECONDS']),
     }), 202
 
 
@@ -511,7 +669,12 @@ def resend_phone_code():
         user = User.query.filter_by(id=old.user_id, is_deleted=False).first()
         if not user or (old.purpose == PHONE_CODE_PURPOSE_LOGIN and not user.is_active):
             raise AuthFlowError('کد تأیید نامعتبر یا منقضی شده است', 401)
-        challenge = _issue_phone_code(user, old.purpose)
+        force_sms = bool(data.get('force_sms'))
+        if force_sms:
+            challenge, delivery_channel = _issue_phone_code_via_sms(
+                user, old.purpose)
+        else:
+            challenge, delivery_channel = _issue_phone_code(user, old.purpose)
         db.session.commit()
     except AuthFlowError as error:
         db.session.rollback()
@@ -521,11 +684,19 @@ def resend_phone_code():
         current_app.logger.warning('Could not resend phone verification SMS.')
         return jsonify({'error': 'ارسال پیامک تأیید موقتاً ممکن نیست. دوباره تلاش کنید.'}), 503
 
+    in_app = delivery_channel == DELIVERY_IN_APP
     return jsonify({
-        'message': 'کد جدید ارسال شد.',
+        'message': (
+            'کد جدید در برنامه روی دستگاه دیگر شما ارسال شد.'
+            if in_app else 'کد جدید پیامک شد.'
+        ),
         'verification_id': challenge.id,
         'mobile_number': _mask_mobile(challenge.mobile_number),
+        'delivery_channel': delivery_channel,
+        'sent_in_app': in_app,
         'expires_in_seconds': int(current_app.config['PHONE_CODE_TTL_SECONDS']),
+        'resend_after_seconds': int(
+            current_app.config['PHONE_CODE_RESEND_SECONDS']),
     }), 202
 
 
@@ -687,6 +858,21 @@ def verify_2fa_register():
         return _error(error)
 
 
+def _require_primary_device(user_id: str):
+    """Point 4: only the primary device may change account security.
+
+    Returns a ready JSON error response when the caller is a secondary device,
+    otherwise None. Without this, anyone who gained a second session could turn
+    on two-step verification or lock the archive and shut the real owner out.
+    """
+    if is_primary_device(user_id, get_jwt().get('device_id')):
+        return None
+    return jsonify({
+        'error': PRIMARY_REQUIRED_MESSAGE,
+        'code': 'primary_device_required',
+    }), 403
+
+
 @auth_bp.route('/2fa/setup', methods=['POST'])
 @jwt_required()
 def setup_two_factor():
@@ -694,6 +880,9 @@ def setup_two_factor():
     user = User.query.filter_by(id=get_jwt_identity(), is_deleted=False).first()
     if not user:
         return jsonify({'error': 'کاربر یافت نشد'}), 404
+    denied = _require_primary_device(user.id)
+    if denied:
+        return denied
     if user.is_2fa_enabled:
         return jsonify({'error': 'تأیید دو مرحله‌ای از قبل فعال است.'}), 409
     secret = user.generate_totp_secret()
@@ -719,11 +908,19 @@ def enable_two_factor():
     user = User.query.filter_by(id=get_jwt_identity(), is_deleted=False).first()
     if not user:
         return jsonify({'error': 'کاربر یافت نشد'}), 404
+    denied = _require_primary_device(user.id)
+    if denied:
+        return denied
     if user.is_2fa_enabled:
         return jsonify({'error': 'تأیید دو مرحله‌ای از قبل فعال است.'}), 409
     if not user.verify_totp(data.get('code')):
         return jsonify({'error': 'کد Google Authenticator نامعتبر است'}), 401
     user.is_2fa_enabled = True
+    record_alert(
+        user.id, 'two_factor_enabled', 'تأیید دو مرحله‌ای فعال شد',
+        body='تأیید دو مرحله‌ای روی حساب شما فعال شد.',
+        severity='info', ip_address=get_client_ip(),
+    )
     db.session.add(AuditLog(
         actor_id=user.id,
         action='two_factor_enabled',
@@ -742,11 +939,19 @@ def disable_two_factor():
     user = User.query.filter_by(id=get_jwt_identity(), is_deleted=False).first()
     if not user:
         return jsonify({'error': 'کاربر یافت نشد'}), 404
+    denied = _require_primary_device(user.id)
+    if denied:
+        return denied
     if not user.is_2fa_enabled:
         return jsonify({'error': 'تأیید دو مرحله‌ای فعال نیست.'}), 409
     if not user.verify_totp(data.get('code')):
         return jsonify({'error': 'کد Google Authenticator نامعتبر است'}), 401
     user.is_2fa_enabled = False
+    record_alert(
+        user.id, 'two_factor_disabled', 'تأیید دو مرحله‌ای غیرفعال شد',
+        body='اگر شما این کار را نکرده‌اید، فوراً حساب خود را بررسی کنید.',
+        severity='critical', ip_address=get_client_ip(),
+    )
     # Rotate the stored secret so an old authenticator code cannot be reused if
     # the owner re-enables the feature later.
     user.generate_totp_secret()

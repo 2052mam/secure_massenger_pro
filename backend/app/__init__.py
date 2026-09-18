@@ -61,6 +61,9 @@ def create_app():
     from app.api.gifs import gifs_bp
     from app.api.devices import devices_bp
     from app.api.stories import stories_bp
+    from app.api.polls import polls_bp
+    from app.api.security import security_bp
+    from app.api.support import support_bp
     from app.admin.routes import admin_web_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')
@@ -75,6 +78,9 @@ def create_app():
     app.register_blueprint(gifs_bp, url_prefix='/api/v1/gifs')
     app.register_blueprint(devices_bp, url_prefix='/api/v1/devices')
     app.register_blueprint(stories_bp, url_prefix='/api/v1/stories')
+    app.register_blueprint(polls_bp, url_prefix='/api/v1/polls')
+    app.register_blueprint(security_bp, url_prefix='/api/v1/security')
+    app.register_blueprint(support_bp, url_prefix='/api/v1/support')
     try:
         from app.api.notifications import notifications_bp
         app.register_blueprint(notifications_bp, url_prefix='/api/v1/notifications')

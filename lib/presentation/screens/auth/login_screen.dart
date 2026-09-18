@@ -95,18 +95,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  /// Telegram behaviour: a number that has never registered is taken to the
+  /// sign-up form instead of receiving an SMS code. The server is the source
+  /// of truth (`registration_required`), so no code can leak to a new number.
   Future<void> _submitPhone() async {
+    final mobile = _mobileCtrl.text.trim();
     final response = await ApiService().post('/auth/request-phone-code', {
-      'mobile_number': _mobileCtrl.text.trim(),
+      'mobile_number': mobile,
     });
     if (!mounted) return;
+    final verificationId = response['verification_id'] as String?;
+    final needsRegistration =
+        response['registration_required'] == true || verificationId == null;
+    if (needsRegistration) {
+      await _openRegistration(mobile);
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PhoneVerificationScreen(
-          verificationId: response['verification_id'] as String,
-          mobileNumber: response['mobile_number'] as String? ?? _mobileCtrl.text.trim(),
+          verificationId: verificationId,
+          mobileNumber: response['mobile_number'] as String? ?? mobile,
           flow: PhoneVerificationFlow.login,
         ),
+      ),
+    );
+  }
+
+  /// Sends the user to registration with the number already filled in.
+  Future<void> _openRegistration(String mobileNumber) async {
+    if (!mounted) return;
+    setState(() => _error = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('این شماره ثبت‌نام نشده است؛ ابتدا ثبت‌نام کنید.'),
+      ),
+    );
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RegisterScreen(initialMobileNumber: mobileNumber),
       ),
     );
   }
@@ -186,7 +213,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 8),
                   Text(
                     phoneMode
-                        ? 'شماره موبایل خود را وارد کنید تا کد ورود پیامک شود'
+                        ? 'شماره موبایل خود را وارد کنید؛ اگر ثبت‌نام نکرده‌اید به صفحه ثبت‌نام می‌روید'
                         : 'ورود ایمیلی فقط برای حساب‌های قدیمیِ بدون شماره موبایل است',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey),
                     textAlign: TextAlign.center,
@@ -277,7 +304,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       onPressed: _loading ? null : _submit,
                       child: _loading
                           ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : Text(phoneMode ? 'ارسال کد ورود' : 'ورود'),
+                          : Text(phoneMode ? 'ادامه' : 'ورود'),
                     ),
                   ),
                   TextButton(
@@ -291,7 +318,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   TextButton(
                     onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => RegisterScreen(
+                          initialMobileNumber: _mobileCtrl.text.trim(),
+                        ),
+                      ),
                     ),
                     child: const Text('حساب ندارید؟ ثبت‌نام کنید'),
                   ),

@@ -30,6 +30,11 @@ class ChatListTile extends StatelessWidget {
         subtitle = isFa ? '📷 عکس' : '📷 Photo';
       } else if (last.messageType == 'video') {
         subtitle = isFa ? '🎥 ویدیو' : '🎥 Video';
+      } else if (last.messageType == 'poll') {
+        final question = last.content?.trim() ?? '';
+        subtitle = question.isEmpty
+            ? (isFa ? '📊 نظرسنجی' : '📊 Poll')
+            : '📊 $question';
       } else if (last.messageType == 'voice') {
         subtitle = isFa ? '🎤 پیام صوتی' : '🎤 Voice message';
       } else {

@@ -1,13 +1,18 @@
 from app.services.request_validation import validate_object_body
 from app.services.timestamps import utc_iso
 from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from app import db
 from app.models.user import User, BlockList, UserDevice
 from app.models.chat import Chat
 from app.models.profile import SearchHistory, UserPhoto
 from app.models.audit import AuditLog
 from app.services.archive_lock import ARCHIVE_TOKEN_TTL, create_archive_token
+from app.services.security_alerts import (
+    is_primary_device,
+    PRIMARY_REQUIRED_MESSAGE,
+    record_alert,
+)
 from datetime import datetime
 import re
 
@@ -237,6 +242,20 @@ def _valid_pin(value):
     return isinstance(value, str) and re.fullmatch(r'\d{4}', value) is not None
 
 
+def _require_primary_device(user_id):
+    """Point 4: only the account's primary device may lock/unlock the archive.
+
+    A secondary session that could set the archive PIN would be able to fence
+    the real owner out of their own archived chats.
+    """
+    if is_primary_device(user_id, get_jwt().get('device_id')):
+        return None
+    return jsonify({
+        'error': PRIMARY_REQUIRED_MESSAGE,
+        'code': 'primary_device_required',
+    }), 403
+
+
 @users_bp.route('/me/archive-pin', methods=['POST'])
 @jwt_required()
 def set_archive_pin():
@@ -245,6 +264,9 @@ def set_archive_pin():
     user = User.query.filter_by(id=user_id, is_deleted=False).first()
     if not user:
         return jsonify({'error': 'کاربر یافت نشد'}), 404
+    denied = _require_primary_device(user_id)
+    if denied:
+        return denied
     data = request.get_json() or {}
     pin = data.get('pin')
     if not _valid_pin(pin):
@@ -252,6 +274,11 @@ def set_archive_pin():
     if user.has_archive_pin and not user.check_archive_pin(data.get('current_pin') or ''):
         return jsonify({'error': 'رمز فعلی آرشیو نادرست است'}), 403
     user.set_archive_pin(pin)
+    record_alert(
+        user_id, 'archive_lock_changed', 'رمز آرشیو تغییر کرد',
+        body='رمز قفل چت‌های آرشیوشده روی حساب شما تنظیم/تغییر کرد.',
+        severity='info', ip_address=get_client_ip(),
+    )
     db.session.add(AuditLog(actor_id=user_id, action='set_archive_pin',
                             entity_type='user', entity_id=user_id,
                             ip_address=get_client_ip()))
@@ -290,6 +317,9 @@ def remove_archive_pin():
     user = User.query.filter_by(id=user_id, is_deleted=False).first()
     if not user:
         return jsonify({'error': 'کاربر یافت نشد'}), 404
+    denied = _require_primary_device(user_id)
+    if denied:
+        return denied
     if user.has_archive_pin:
         data = request.get_json() or {}
         if not user.check_archive_pin(data.get('pin') or ''):
@@ -426,21 +456,46 @@ def search_users():
         if not blocked:
             result_users.append(u.to_dict())
 
-    from app.models.chat import Chat
-    chats = Chat.query.filter(
+    from app.models.chat import Chat, ChatMember
+    # Telegram searches the chats you are already in (groups AND channels)
+    # as well as public channels/groups you could join. Only returning public
+    # channels used to hide every group the user is a member of.
+    joined_ids = {
+        row.chat_id for row in ChatMember.query.filter_by(
+            user_id=current_id, is_deleted=False,
+        ).with_entities(ChatMember.chat_id).all()
+    }
+    title_match = Chat.title.ilike(f'%{q}%') | Chat.username.ilike(f'%{q}%')
+
+    joined_chats = Chat.query.filter(
         Chat.is_deleted == False,
+        Chat.is_deleted_for_all == False,
+        Chat.id.in_(joined_ids or {''}),
+        Chat.chat_type.in_(('group', 'channel')),
+        title_match,
+    ).limit(50).all() if joined_ids else []
+
+    public_chats = Chat.query.filter(
+        Chat.is_deleted == False,
+        Chat.is_deleted_for_all == False,
         Chat.is_public == True,
-        Chat.chat_type == 'channel',
-        (Chat.title.ilike(f'%{q}%') | Chat.username.ilike(f'%{q}%'))
+        Chat.chat_type.in_(('group', 'channel')),
+        ~Chat.id.in_(joined_ids or {''}),
+        title_match,
     ).limit(20).all()
 
-    result_chats = [{
-        'id': c.id,
-        'chat_type': c.chat_type,
-        'title': c.title,
-        'username': c.username,
-        'avatar_url': c.avatar_url,
-    } for c in chats]
+    def _chat_payload(chat, joined):
+        return {
+            'id': chat.id,
+            'chat_type': chat.chat_type,
+            'title': chat.title,
+            'username': chat.username,
+            'avatar_url': chat.avatar_url,
+            'is_member': joined,
+        }
+
+    result_chats = [_chat_payload(c, True) for c in joined_chats]
+    result_chats += [_chat_payload(c, False) for c in public_chats]
 
     return jsonify({'users': result_users, 'chats': result_chats}), 200
 
