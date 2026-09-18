@@ -1,11 +1,12 @@
 import '../../core/utils/api_datetime.dart';
+import '../../core/utils/app_locale.dart';
 import 'package:equatable/equatable.dart';
 
 import 'user_model.dart';
 
 class ChatModel extends Equatable {
   final String id;
-  final String chatType; // private | group | channel | support
+  final String chatType; // private | group | channel | support | saved | security
   final String? title;
   final String? username;
   final String? avatarUrl;
@@ -15,6 +16,10 @@ class ChatModel extends Equatable {
   final bool isMuted;
   final bool isSponsored;
   final bool allowForwarding;
+
+  /// Point 7: a server-authored service chat ("Security Support"). The user
+  /// can read it but never write to it.
+  final bool isReadOnly;
   final int slowModeDelay;
   final int unreadCount;
   final LastMessageModel? lastMessage;
@@ -33,6 +38,7 @@ class ChatModel extends Equatable {
     this.isMuted = false,
     this.isSponsored = false,
     this.allowForwarding = true,
+    this.isReadOnly = false,
     this.slowModeDelay = 0,
     this.unreadCount = 0,
     this.lastMessage,
@@ -53,6 +59,8 @@ class ChatModel extends Equatable {
       isMuted: json['is_muted'] as bool? ?? false,
       isSponsored: json['is_sponsored'] as bool? ?? false,
       allowForwarding: json['allow_forwarding'] as bool? ?? true,
+      isReadOnly: json['is_read_only'] as bool? ??
+          (json['chat_type'] as String? ?? '') == 'security',
       slowModeDelay: json['slow_mode_delay'] as int? ?? 0,
       unreadCount: json['unread_count'] as int? ?? 0,
       lastMessage: json['last_message'] != null
@@ -70,13 +78,27 @@ class ChatModel extends Equatable {
 
   /// Personal conversations for the default "Personal" folder (Telegram parity).
   bool get isPersonal =>
-      chatType == 'private' || chatType == 'support' || chatType == 'saved';
+      chatType == 'private' ||
+      chatType == 'support' ||
+      chatType == 'saved' ||
+      chatType == 'security';
+
+  /// The one-way security service chat (Point 7).
+  bool get isSecurityChat => chatType == 'security';
 
   String get displayTitle {
     if (chatType == 'private' && otherUser != null) {
       return otherUser!.displayName;
     }
-    return title ?? username ?? 'چت';
+    // Service chats are titled by the app, so the name follows the UI
+    // language instead of whatever the server stored (Point 5).
+    if (chatType == 'security') {
+      return AppLocale.pick('پشتیبانی امنیتی', 'Security Support');
+    }
+    if (chatType == 'saved') {
+      return AppLocale.pick('پیام‌های ذخیره‌شده', 'Saved Messages');
+    }
+    return title ?? username ?? AppLocale.pick('چت', 'Chat');
   }
 
   @override
@@ -92,6 +114,7 @@ class ChatModel extends Equatable {
     isMuted,
     isSponsored,
     allowForwarding,
+    isReadOnly,
     slowModeDelay,
     unreadCount,
     lastMessage,

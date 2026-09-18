@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/chat_model.dart';
+import '../../core/utils/app_locale.dart';
 
 /// Sanctions-proof notifications (Item 3). There is deliberately NO
 /// Firebase/FCM anywhere in this app:
@@ -23,8 +24,11 @@ class NotificationService {
   NotificationService._();
 
   static const _channelId = 'secure_messenger_messages';
-  static const _channelName = 'پیام‌های جدید';
-  static const _channelDesc = 'اعلان پیام‌های جدید چت‌ها';
+  // Android caches a channel's name/description on first creation, so these
+  // stay language-neutral rather than freezing whichever language was active
+  // the first time the app ran.
+  static const _channelName = 'Messages';
+  static const _channelDesc = 'New chat message notifications';
   static const _prefsEnabledKey = 'notif_enabled';
   static const _prefsSeenIdsKey = 'notif_seen_ids';
   static const _prefsCursorKey = 'notif_cursor';
@@ -148,7 +152,9 @@ class NotificationService {
       android: androidDetails,
       iOS: darwinDetails,
     );
-    final displayTitle = count > 1 ? '$title ($count پیام جدید)' : title;
+    final displayTitle = count > 1
+        ? '$title ($count ${AppLocale.pick('پیام جدید', count == 1 ? 'new message' : 'new messages')})'
+        : title;
     try {
       await _plugin.show(
         id: _stableId(chatId),
@@ -177,7 +183,7 @@ class NotificationService {
       channelDescription: _channelDesc,
       importance: Importance.high,
       priority: Priority.high,
-      ticker: 'تست اعلان',
+      ticker: AppLocale.pick('تست اعلان', 'Notification test'),
     );
     const darwinDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -188,7 +194,10 @@ class NotificationService {
       await _plugin.show(
         id: 770001,
         title: 'SecureMessenger',
-        body: '✅ اعلان آزمایشی رسید — اتصال پیام‌رسانی سالم است.',
+        body: AppLocale.pick(
+          '✅ اعلان آزمایشی رسید — اتصال پیام‌رسانی سالم است.',
+          '✅ Test notification delivered — messaging is connected.',
+        ),
         notificationDetails: NotificationDetails(
           android: androidDetails,
           iOS: darwinDetails,
@@ -343,37 +352,41 @@ class NotificationService {
   /// User-facing one-line preview, mirroring the server's wording.
   static String previewFor({String? messageType, String? content}) {
     final text = content?.trim() ?? '';
+    String t(String fa, String en) => AppLocale.pick(fa, en);
     if (messageType == 'poll') {
-      return text.isNotEmpty ? '📊 $text' : '📊 نظرسنجی';
+      return text.isNotEmpty ? '📊 $text' : t('📊 نظرسنجی', '📊 Poll');
     }
     if (text.isNotEmpty && messageType != 'location') return _truncate(text);
     switch (messageType) {
       case 'image':
-        return '📷 عکس';
+        return t('📷 عکس', '📷 Photo');
       case 'video':
-        return '🎬 ویدیو';
+        return t('🎬 ویدیو', '🎬 Video');
       case 'voice':
-        return '🎤 پیام صوتی';
+        return t('🎤 پیام صوتی', '🎤 Voice message');
       case 'audio':
       case 'music':
-        return text.isNotEmpty ? '🎵 $text' : '🎵 موسیقی';
+        return text.isNotEmpty ? '🎵 $text' : t('🎵 موسیقی', '🎵 Music');
       case 'file':
-        return text.isNotEmpty ? '📎 $text' : '📎 فایل';
+        return text.isNotEmpty ? '📎 $text' : t('📎 فایل', '📎 File');
       case 'sticker':
-        return 'استیکر';
+        return t('استیکر', 'Sticker');
       case 'gif':
         return 'GIF';
       case 'location':
-        return '📍 موقعیت مکانی';
+        return t('📍 موقعیت مکانی', '📍 Location');
       case 'live_location':
-        return '📍 موقعیت زنده';
+        return t('📍 موقعیت زنده', '📍 Live location');
       case 'video_note':
       case 'round_video':
-        return '🎥 ویدیو مسیج';
+        return t('🎥 ویدیو مسیج', '🎥 Video message');
       default:
-        return text.isNotEmpty ? _truncate(text) : 'پیام جدید';
+        return text.isNotEmpty
+            ? _truncate(text)
+            : t('پیام جدید', 'New message');
     }
   }
+
 
   static String _truncate(String text, [int max = 120]) {
     final single = text.replaceAll(RegExp(r'\s+'), ' ');

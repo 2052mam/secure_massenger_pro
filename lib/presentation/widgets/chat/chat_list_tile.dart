@@ -71,6 +71,17 @@ class ChatListTile extends StatelessWidget {
                     url: avatarUrl,
                     token: StorageService.getToken(),
                     radius: 28,
+                    // Point 7: the security service chat gets a recognisable
+                    // shield instead of a "پ"/"S" initial, so an official
+                    // notice is never mistaken for a message from a person.
+                    fallbackIcon: chat.isSecurityChat
+                        ? Icons.verified_user
+                        : (chat.chatType == 'saved'
+                            ? Icons.bookmark
+                            : null),
+                    foreground: chat.isSecurityChat
+                        ? const Color(0xFF2E7D32)
+                        : null,
                   ),
                   if (chat.chatType == 'private' && isOnline)
                     Positioned(

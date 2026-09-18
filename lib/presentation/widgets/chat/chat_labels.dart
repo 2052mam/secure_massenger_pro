@@ -36,6 +36,16 @@ class ChatLabels {
   String get chatUnavailable =>
       isFa ? 'این چت دیگر در دسترس نیست' : 'This chat is no longer available';
 
+  // ----- Point 5: strings that were previously hardcoded (and in three
+  // cases written with their characters reversed, so they rendered as
+  // gibberish) at the call site. ------------------------------------------
+  String get backgroundSet =>
+      isFa ? 'پس‌زمینه تنظیم شد' : 'Background updated';
+  String get backgroundFailed =>
+      isFa ? 'تغییر پس‌زمینه ناموفق بود' : 'Could not change the background';
+  String get userBlocked => isFa ? 'کاربر بلاک شد' : 'User blocked';
+  String get userUnblocked => isFa ? 'کاربر آنبلاک شد' : 'User unblocked';
+
   // ----- Archive ------------------------------------------------------
   String get archive => isFa ? 'آرشیو' : 'Archive';
   String get archivedChats => isFa ? 'چت‌های آرشیوشده' : 'Archived chats';

@@ -68,7 +68,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         setState(() => _isBlocked = true);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('ربراک کالب دش')));
+        ).showSnackBar(SnackBar(
+          content: Text(ChatLabels.of(context).userBlocked),
+        ));
       }
     } catch (e) {
       if (mounted)
@@ -85,7 +87,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         setState(() => _isBlocked = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('کالبنآ دش')));
+        ).showSnackBar(SnackBar(
+          content: Text(ChatLabels.of(context).userUnblocked),
+        ));
       }
     } catch (e) {
       if (mounted)

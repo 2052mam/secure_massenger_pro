@@ -13,6 +13,7 @@ import 'data/services/media_cache_service.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/push_service.dart';
 import 'data/services/storage_service.dart';
+import 'core/utils/app_locale.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +25,9 @@ Future<void> main() async {
 
   await Hive.initFlutter();
   await StorageService.init();
+  // Make the chosen language available to services that have no BuildContext
+  // (notifications, background polls) before anything can emit text.
+  await AppLocale.load();
   // Offline media vault: every photo/video/file this device sends or opens is
   // kept locally so the chat history survives a total loss of server data.
   await MediaCacheService.instance.init();

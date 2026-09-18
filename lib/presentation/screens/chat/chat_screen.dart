@@ -148,12 +148,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   bool _can(String right) {
     if (_chatUnavailable) return false;
+    // Point 7: the Security Support chat is one-way — the server writes, the
+    // user only reads. The backend enforces this too; hiding the composer
+    // just avoids offering an action that would always be refused.
+    if (_chatType == 'security') return false;
     if (_chatType != 'group' && _chatType != 'channel') return true;
     return _capabilities[right] == true;
   }
 
   bool _canDelete(MessageModel msg) {
-    if (_chatType == 'private' || _chatType == 'saved') return true;
+    if (_chatType == 'private' ||
+        _chatType == 'saved' ||
+        _chatType == 'security') return true;
     if (_chatType == 'support')
       return msg.senderId == _currentUserId ||
           _myRole == 'owner' ||
@@ -2418,7 +2424,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('کب‌دنارگ میظنت دش')));
+        ).showSnackBar(SnackBar(
+          content: Text(ChatLabels.of(context).backgroundSet),
+        ));
       }
     } catch (e) {
       if (mounted) {
@@ -3006,15 +3014,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                _chatType == 'channel'
+                _chatType == 'security'
                     ? _label(
-                        'Broadcast channel — only authorized administrators can publish.',
-                        'کانال انتشار — فقط مدیران مجاز می‌توانند پست منتشر کنند.',
+                        'Official security notices. This chat is read-only.',
+                        'اعلان‌های رسمی امنیتی. این چت فقط خواندنی است.',
                       )
-                    : _label(
-                        'Sending messages is not allowed in this group.',
-                        'ارسال پیام در این گروه مجاز نیست.',
-                      ),
+                    : _chatType == 'channel'
+                        ? _label(
+                            'Broadcast channel — only authorized administrators can publish.',
+                            'کانال انتشار — فقط مدیران مجاز می‌توانند پست منتشر کنند.',
+                          )
+                        : _label(
+                            'Sending messages is not allowed in this group.',
+                            'ارسال پیام در این گروه مجاز نیست.',
+                          ),
                 textAlign: TextAlign.center,
               ),
               if (_chatType == 'channel')

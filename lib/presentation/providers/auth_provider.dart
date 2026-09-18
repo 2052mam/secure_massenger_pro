@@ -222,19 +222,38 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
   /// Called when the server reports `device_terminated` / `session_ended`:
   /// drop the dead credentials locally (the remote device already ended the
   /// server-side session, so no logout call is needed).
+  ///
+  /// Point 3: this used to leave the phone signed in. Terminating a device
+  /// makes *every* subsequent request 401, and the calls made while signing
+  /// out — `PushService.unregisterToken()` above all — 401 as well. Each of
+  /// those re-entered this method, bumped `_sessionGeneration`, and so made
+  /// the outer `_clearSession(generation)` fail its `_isCurrent` check and
+  /// return without clearing anything. The session survived and the phone
+  /// stayed on the chat list. The guard below makes termination run exactly
+  /// once, and the state is cleared FIRST so no later failure can undo it.
+  bool _terminating = false;
+
   Future<void> handleRemoteTermination() async {
-    final generation = ++_sessionGeneration;
-    final userId = state.valueOrNull?.id ?? StorageService.getUserId();
-    if (userId != null) {
-      try {
-        await AccountService.remove(userId);
-      } catch (_) {}
-    }
-    // Rotate the FCM token too (the POST 401s harmlessly; the server already
-    // cleared the token when terminating the device).
+    if (_terminating) return;
+    _terminating = true;
     try {
-      await PushService.unregisterToken();
-    } catch (_) {}
-    await _clearSession(generation);
+      final generation = ++_sessionGeneration;
+      final userId = state.valueOrNull?.id ?? StorageService.getUserId();
+      // Clear before any network call, so a 401 on the way out cannot leave
+      // the device authenticated.
+      await _clearSession(generation);
+      if (userId != null) {
+        try {
+          await AccountService.remove(userId);
+        } catch (_) {}
+      }
+      // Rotate the FCM token too (the POST 401s harmlessly; the server already
+      // cleared the token when terminating the device).
+      try {
+        await PushService.unregisterToken();
+      } catch (_) {}
+    } finally {
+      _terminating = false;
+    }
   }
 }

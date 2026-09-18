@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/api_constants.dart';
 import 'notification_service.dart';
+import '../../core/utils/app_locale.dart';
 
 /// What a background poll cycle concluded.
 enum PollOutcome {
@@ -34,6 +35,10 @@ class NotificationPoller {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool('notif_enabled') == false) return PollOutcome.noNew;
+      // Point 5: this runs in background isolates where no widget tree (and
+      // so no Localizations) exists. Without this the banner text always fell
+      // back to Persian, even for a user running the app in English.
+      AppLocale.set(prefs.getString('locale') ?? 'fa');
       var token = prefs.getString('access_token');
       final refreshToken = prefs.getString('refresh_token');
       if (token == null || token.isEmpty) return PollOutcome.signedOut;
